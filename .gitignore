@@ -1,0 +1,26 @@
+# 忽略指定项目依赖
+AnimeSpeechGen/node_modules/
+
+# 忽略数据库迁移文件（保留空目录结构）
+AniVoiceBackend/migrations/*
+
+# 忽略预训练模型目录（保留空目录结构）
+AniVoiceBackend/pretrained_model
+
+# 通用开发环境排除项
+*.log
+*.pyc
+*.sqlite
+.env
+.venv
+.DS_Store
+
+# 编辑器/IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.bak
