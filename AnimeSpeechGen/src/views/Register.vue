@@ -63,11 +63,11 @@
               >
                 <template #suffix>
                   <span id="suffix-span">
-                    <span style="margin-right: 10px;">|</span>
+                    <span style="margin-right: 10px">|</span>
                     <span
                       id="suffix-span-2"
                       @click="sendValidationCode(registerForm.email)"
-                      style="color: #1764FF;"
+                      style="color: #1764ff"
                       ref="spanRef"
                     >
                       {{ isSendValidationCode }}
@@ -112,8 +112,9 @@ import type { RegisterForm, RegisterResponseData } from '@/util/types'
 import type { FormInstance, TabsPaneContext, FormRules } from 'element-plus'
 import { ElMessage, ElNotification } from 'element-plus'
 import { registerApi, sendEmailCodeApi } from '@/api'
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs'
 import { generateRandomString } from '@/util/utils'
+import { error } from 'console'
 
 const router = useRouter()
 const registerFormRef = ref<FormInstance>()
@@ -126,26 +127,29 @@ const registerForm = reactive<RegisterForm>({
   salt: '',
 })
 const registerFormSend: RegisterForm = {
-  "email": "",
-  "username": "",
-  "password": "",
-  "repassword": "",
-  "validationCode": "",
-  "salt": "",
+  email: '',
+  username: '',
+  password: '',
+  repassword: '',
+  validationCode: '',
+  salt: '',
 }
 
 // 验证码区域文字说明
 const spanRef = ref()
 const isSendValidationCode = ref<string>('发送验证码')
 
-
 let registerResponse = reactive<RegisterResponseData>({
-  code: '',
+  meta: {
+    code: '',
+    message: '',
+    timestamp: '',
+  },
   username: '',
   avatar: '',
   index: '',
   rate: '',
-  message: ''
+  id: '',
 })
 
 // 表单验证规则
@@ -207,15 +211,16 @@ async function sendValidationCode(email: string) {
     }
   }, 1000)
   // 发送
-  try {
-    const res = await sendEmailCodeApi(email)
-    if (res.code != '-1') ElMessage.success('验证码发送成功')
-    else {
-      ElMessage.error('验证码发送失败')
-    }
-  } catch {
-    ElMessage.error('验证码发送失败')
-  }
+  await sendEmailCodeApi(email)
+    .then((response) => {
+      ElMessage({
+        type: 'success',
+        message: response.meta.message,
+      })
+    })
+    .catch((error) => {
+      ElMessage.error(error.message)
+    })
 }
 
 const toRegister = async () => {
@@ -225,36 +230,32 @@ const toRegister = async () => {
     // console.log(valid_message)
     // 以valid作为判断条件，如果通过校验才执行登录
     if (valid) {
-      try {
-        // 前端密码加密
-        var ENCRYPTION_SALT = bcrypt.genSaltSync(12)
-        const hashedPassword = bcrypt.hashSync(registerForm.password, ENCRYPTION_SALT);
-        registerFormSend.email = registerForm.email
-        registerFormSend.username = registerForm.username
-        registerFormSend.password = hashedPassword
-        registerFormSend.repassword = hashedPassword
-        registerFormSend.validationCode = registerForm.validationCode
-        registerFormSend.salt = ENCRYPTION_SALT
-        console.log(registerFormSend)
+      // 前端密码加密
+      var ENCRYPTION_SALT = bcrypt.genSaltSync(12)
+      const hashedPassword = bcrypt.hashSync(registerForm.password, ENCRYPTION_SALT)
+      registerFormSend.email = registerForm.email
+      registerFormSend.username = registerForm.username
+      registerFormSend.password = hashedPassword
+      registerFormSend.repassword = hashedPassword
+      registerFormSend.validationCode = registerForm.validationCode
+      registerFormSend.salt = ENCRYPTION_SALT
+      console.log(registerFormSend)
 
-        registerResponse = await registerApi(registerFormSend)
-        if (registerResponse.code == '1') {
-          //  1.提示用户
+      await registerApi(registerFormSend)
+        .then((response) => {
           ElMessage({
             type: 'success',
-            message: registerResponse.message,
+            message: response.meta.message,
           })
-          // 2.跳转登录页
+          // 跳转登录页
           router.replace({ path: '/login' })
-        }  else {
-          ElMessage({ type: 'error', message: registerResponse.message })
-        }
-      } catch (error) {
-        ElNotification({
-          message: (error as Error).message,
-          type: 'error',
         })
-      }
+        .catch((error) => {
+          ElNotification({
+            message: error.message,
+            type: 'error',
+          })
+        })
     }
   })
 }

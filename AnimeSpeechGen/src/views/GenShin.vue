@@ -56,19 +56,26 @@
               style="width: 100%"
               :rows="10"
               type="textarea"
-              placeholder="Please input"
+              placeholder="请输入文本，仅支持中文"
               maxlength="100"
               show-word-limit
             />
           </div>
           <div class="btn-container">
-            <el-button
+            <a-button
+              class="generate-btn"
+              type="primary"
+              :loading="isGeneratingVoice"
+              @click="handleGenerateBtn"
+              >生成
+            </a-button>
+            <!-- <el-button
               class="generate-btn"
               v-loading="isGeneratingVoice"
               @click="handleGenerateBtn"
               type="primary"
               >生成</el-button
-            >
+            > -->
             <!-- <el-button class="download-btn" @click="handleDownloadBtn" type="primary"
               >下载</el-button
             > -->
@@ -105,17 +112,13 @@
           </div>
         </div>
       </el-col>
-      <el-col :span="2">
-
-      </el-col>
+      <el-col :span="2"> </el-col>
     </el-row>
   </div>
-
-
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onBeforeMount } from 'vue'
+import { ref, onMounted, onBeforeMount, onUpdated } from 'vue'
 import { getStaticsUrlApi, getGeneratedVoiceApi } from '@/api'
 import { Icon } from '@iconify/vue'
 import { fa, tr } from 'element-plus/es/locales.mjs'
@@ -132,38 +135,35 @@ const chooseCharacter = ref({ name: '', url: '', avator: '', index: 0 })
 const textarea = ref('')
 const isDownloadAvilabel = ref(true)
 const latestVoiceUrl = ref('')
-const audio_url = ref(
-  'http://10.60.102.53:25683//static/gen_audios/2df57f41-0108-4e22-b7e5-094e55c38bb9.wav',
-)
+const audio_url = ref()
 const audioPlayer = ref(null) // 音频组件 ref
 const isGeneratingVoice = ref(false)
-
 
 // 定义滚动条引用
 const scrollbarRef = ref<InstanceType<typeof ElScrollbar> | null>(null)
 
 const getCharacterNamesFromLovalStorage = () => {
-  const storeNames = localStorage.getItem(nameKey)
+  const storeNames = localStorage.getItem(nameKey)?.split(',')
   return storeNames
 }
 
 const getImageUrlsFromLocalStorage = () => {
-  const storedUrls = localStorage.getItem(standsKey)
+  const storedUrls = localStorage.getItem(standsKey)?.split(',')
   return storedUrls
 }
 
 const getCharacterAvatorsFromLocalStorage = () => {
-  const storeAvators = localStorage.getItem(avatorKey)
+  const storeAvators = localStorage.getItem(avatorKey)?.split(',')
   return storeAvators
 }
 
-// var names = ref(getCharacterNamesFromLovalStorage())
-// var standUrls = ref(getImageUrlsFromLocalStorage()) // {}
-// var avatorUrls = ref(getCharacterAvatorsFromLocalStorage())
-var names = ref()
-var standUrls = ref() // {}
-var avatorUrls = ref()
-// console.log(names.value)
+var names = ref(getCharacterNamesFromLovalStorage())
+var standUrls = ref(getImageUrlsFromLocalStorage()) // {}
+var avatorUrls = ref(getCharacterAvatorsFromLocalStorage())
+// var names = ref()
+// var standUrls = ref() // {}
+// var avatorUrls = ref()
+console.log(names.value)
 // console.log(standUrls.value)
 
 // 从字典中随机获取一个元素
@@ -179,22 +179,23 @@ const getRandomImage = () => {
 
 // 从后端请求图片 URLs 并存储到 localStorage
 const fetchImageUrls = async () => {
-  try {
-    const response = await getStaticsUrlApi(belong)
-    console.log(response)
-    if (response.names) {
-      // 存储获取到的图片 URLs 到 localStorage
-      localStorage.setItem(nameKey, response.names)
-      localStorage.setItem(standsKey, response.stands)
-      localStorage.setItem(avatorKey, response.avators)
-      names.value = response.names
-      standUrls.value = response.stands
-      avatorUrls.value = response.avators
-      console.log(names.value)
-    }
-  } catch (error) {
-    console.error('请求失败:', error)
-  }
+  await getStaticsUrlApi(belong)
+    .then((response) => {
+      if (response.names) {
+        // 存储获取到的图片 URLs 到 localStorage
+        localStorage.setItem(nameKey, response.names)
+        localStorage.setItem(standsKey, response.stands)
+        localStorage.setItem(avatorKey, response.avators)
+        names.value = response.names
+        standUrls.value = response.stands
+        avatorUrls.value = response.avators
+        console.log(names.value)
+      }
+    })
+    .catch((error) => {
+      console.error(error.message)
+      throw error
+    })
 }
 
 const handleGenerateBtn = async () => {
@@ -208,23 +209,21 @@ const handleGenerateBtn = async () => {
   isGeneratingVoice.value = true // 显示加载
   console.log(`current chosen character: ${chooseCharacter.value['name']}, belong ${belong}`)
   var res = await getGeneratedVoiceApi(textarea.value, chooseCharacter.value.name, belong, 'zh')
-  isGeneratingVoice.value = false
-  console.log(res)
-  if (res.code) {
-    ElMessage({
-      message: res.message,
-      type: 'success',
+    .then((response) => {
+      console.log(response)
+      isGeneratingVoice.value = false
+      ElMessage({
+        message: response.meta.message,
+        type: 'success',
+      })
+      audio_url.value = response.audio_url
+      audioPlayer.value.src = audio_url.value
+      // $refs.audioPlayer.src = this.audioUrl;
+      isDownloadAvilabel.value = true
     })
-    audio_url.value = res.audio_url
-    audioPlayer.value.src = audio_url.value
-    // $refs.audioPlayer.src = this.audioUrl;
-    isDownloadAvilabel.value = true
-  } else {
-    ElMessage({
-      message: res.message,
-      type: 'error',
+    .catch((error) => {
+      console.log(error.message)
     })
-  }
 }
 
 const getServerFileName = async () => {
@@ -336,6 +335,16 @@ const handleAvatorClick = (index: number) => {
 }
 
 onBeforeMount(async () => {
+  if (!names.value || names.value.length === 0) {
+    // 如果 standUrls 为空，从后端获取数据
+    console.log('get stands from backend.')
+    await fetchImageUrls() // 等待数据获取完成
+  }
+  getRandomImage() // 在确保 standUrls, names, avators 有数据后调用
+  console.log(chooseCharacter.value)
+})
+
+onUpdated(async () => {
   if (!names.value || names.value.length === 0) {
     // 如果 standUrls 为空，从后端获取数据
     console.log('get stands from backend.')

@@ -79,7 +79,7 @@
             <el-switch v-model="isAutoLogin" class="autoLogin" inline-prompt :active-icon="Check"
               :inactive-icon="Close" />
           </el-form-item> -->
-
+          <a-alert v-if="showLoginError" :message="loginErrorTip" type="error" show-icon />
           <el-button type="primary" class="loginButton" @click="showVerification" title="login">
             登录
           </el-button>
@@ -113,10 +113,10 @@
 import { User, Lock, Cellphone } from '@element-plus/icons-vue'
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import type { LoginForm, LoginFormPhone, LoginResponseData } from '@/util/types'
+import type { LoginForm, LoginFormPhone, LoginResponseData, MetaForm } from '@/util/types'
 import type { FormInstance, TabsPaneContext, FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/counter'
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs'
 import { ElMessage, ElNotification } from 'element-plus'
 import SlideVerify from '@/components/SlideVerify.vue'
 import DiyMask from '@/components/DiyMask.vue'
@@ -126,6 +126,8 @@ import { getSaltApi } from '@/api'
 const sliderVisible = ref(false) //滑动验证ui
 const isVerified = ref(false)
 let maskRef = ref(null)
+const loginErrorTip = ref('')
+const showLoginError = ref(false)
 
 const handleSlideSuccess = () => {
   sliderVisible.value = false
@@ -152,28 +154,32 @@ const loginFormRef = ref<FormInstance>()
 const loginForm = reactive<LoginForm>({
   email: '',
   password: '',
-  salt: "",
+  salt: '',
 }) // reactive 的变量不需要.value
 
 const loginFormSend: LoginForm = {
-  "email": '',
-  "password": '',
-  "salt": "",
+  email: '',
+  password: '',
+  salt: '',
 }
 let loginResponse = reactive<LoginResponseData>({
-  code: '',
+  meta: {
+    code: '',
+    message: '',
+    timestamp: '',
+  },
   username: '',
   avatar: '',
   index: '',
   rate: '',
   token: '',
-  message: '',
+  id: '',
 })
 
 const loginFormPhone = reactive<LoginFormPhone>({
   phone: '',
   code: '',
-  salt: "",
+  salt: '',
 })
 
 const loginRules = reactive<FormRules<LoginForm>>({
@@ -209,41 +215,38 @@ const tologin = async () => {
 
     // 以valid作为判断条件，如果通过校验才执行登录
     if (valid) {
-      try {
-        if (!isVerified.value) {
-          console.log('请先通过滑动验证！')
-          return
-        }
+      if (!isVerified.value) {
+        console.log('请先通过滑动验证！')
+        return
+      }
 
-        // 前端密码加密
-        // 获取后端该用户的盐值
-        var saltReponse = await getSaltApi(loginForm.email)
-        if (saltReponse.code != '1') {
-          ElMessage({ type: 'error', message: saltReponse.message })
-          return
-        }
-        var ENCRYPTION_SALT = saltReponse.salt
-        const hashedPassword = bcrypt.hashSync(loginForm.password, ENCRYPTION_SALT);
-        loginFormSend.email = loginForm.email
-        loginFormSend.password = hashedPassword
-        loginFormSend.salt = ENCRYPTION_SALT
-        console.log(loginFormSend)
+      // 前端密码加密
+      // 获取后端该用户的盐值
+      var saltReponse = await getSaltApi(loginForm.email).catch((error) => {
+        // ElMessage({ type: 'error', message: error.response?.status, error.message })
+        return
+      })
+      console.log(saltReponse.salt)
+      var ENCRYPTION_SALT = saltReponse.salt
+      const hashedPassword = bcrypt.hashSync(loginForm.password, ENCRYPTION_SALT)
+      loginFormSend.email = loginForm.email
+      loginFormSend.password = hashedPassword
+      loginFormSend.salt = ENCRYPTION_SALT
+      console.log(loginFormSend)
 
-        loginResponse = await userStore.login(loginFormSend)
-        if (loginResponse.code == '1') {
+      await userStore
+        .login(loginFormSend)
+        .then((response) => {
+          showLoginError.value = false
           //  1.提示用户
           ElMessage({ type: 'success', message: '登陆成功' })
           // 2.跳转首页
           router.replace({ path: '/' })
-        } else {
-          ElMessage({ type: 'error', message: loginResponse.message })
-        }
-      } catch (error) {
-        ElNotification({
-          message: (error as Error).message,
-          type: 'error',
         })
-      }
+        .catch((error) => {
+          loginErrorTip.value = error.message
+          showLoginError.value = true
+        })
     }
   })
 }
@@ -360,6 +363,7 @@ const tologin = async () => {
   z-index: 999999;
   background: rgba(0, 0, 0, 0.5);
 }
+
 .verification {
   position: absolute;
   top: 50%;

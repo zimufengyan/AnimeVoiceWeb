@@ -1,102 +1,178 @@
 import { request } from '@/util/request'
 import type { LoginForm, RegisterForm, LoginFormPhone, LoginResponseData } from './util/types'
 
+const BASEURL = 'http://10.60.102.53:25683'
+
 enum API {
-  LOGIN = 'http://10.60.102.53:25683/login',
-  LOGOUT = 'http://10.60.102.53:25683/logout',
-  REGISTER = 'http://10.60.102.53:25683/register',
-  EMAILCODE = 'http://10.60.102.53:25683/get_email_code',
-  BCRYPTSALT = "http://10.60.102.53:25683/get_salt",
-  CHARSTATICURL = "http://10.60.102.53:25683/get_belong_statics",
-  GENERATE_VOICE = "http://10.60.102.53:25683/generate_voice",
+  LOGIN = `${BASEURL}/login`,
+  LOGOUT = `${BASEURL}/logout`,
+  REGISTER = `${BASEURL}/register`,
+  EMAILCODE = `${BASEURL}/get_email_code`,
+  BCRYPTSALT = `${BASEURL}/get_salt`,
+  CHARSTATICURL = `${BASEURL}/get_belong_statics`,
+  GENERATE_VOICE = `${BASEURL}/generate_voice`,
+  GET_AUDIO_RECORDS = `${BASEURL}/get_recent_audio_records`,
+  DELETE_AURIO_RECORD = `${BASEURL}/delete_audio_record`,
+  DELETE_AURIO_RECORDS = `${BASEURL}/delete_audio_records`,
+  HITOKITO_API = 'https://v1.hitokoto.cn',
 }
 
 //登录接口
-export const loginApi = async (data:LoginForm)=>{
+export const loginApi = async (data: LoginForm) => {
   // request.post<any,LoginResponseData>(API.LOGIN,data)
-  const response = await request({
+  return await request({
     url: API.LOGIN,
-    method: "POST",
-    data: data
-  });
-  return {
-    code: response.code,
-    username: response.username,
-    avatar: response.avatar,
-    index: response.index,
-    rate: response.rate,
-    token: response.token,
-    message: response.message,
-
-  };
+    method: 'POST',
+    data: data,
+  })
+    .then((response) => {
+      console.log('请求成功:', response)
+      return {
+        meta: response.meta,
+        username: response.username,
+        avatar: response.avatar,
+        index: response.index,
+        rate: response.rate,
+        token: response.token,
+        id: response.user_id,
+      }
+    })
+    .catch((error) => {
+      console.error('请求失败:', error.response?.status, error.message)
+      throw error
+    })
 }
 
 export const logoutApi = () => {
-  return request.post(API.LOGOUT);
-};
+  return request.get(API.LOGOUT)
+}
 
 export const getSaltApi = async (email: string) => {
-  const response =  await request({
+  return await request({
     url: API.BCRYPTSALT,
-    method: "GET",
+    method: 'GET',
     params: {
-      email: email
-    }
+      email: email,
+    },
   })
-  return {
-    code: response.code,
-    salt: response.salt,
-    message: response.message,
-  }
+    .then((response) => {
+      console.log('请求成功:', response)
+      return {
+        salt: response.salt,
+        meta: response.meta,
+      }
+    })
+    .catch((error) => {
+      console.error('请求失败:', error.response?.status, error.message)
+      throw error
+    })
+}
+
+export const sendEmailCodeApi = async (email: string) => {
+  return await request({
+    url: API.EMAILCODE,
+    method: 'GET',
+    params: {
+      email: email,
+    },
+  })
 }
 
 export const registerApi = async (data: RegisterForm) => {
-  const response = await request({
+  return await request({
     url: API.REGISTER,
-    method: "POST",
-    data: data
-  });
-  return {
-    code: response.code,
-    username: response.username,
-    avatar: response.avatar,
-    index: response.index,
-    rate: response.rate,
-    message: response.message,
-  }
+    method: 'POST',
+    data: data,
+  })
+    .then((response) => {
+      console.log('请求成功:', response)
+      return {
+        username: response.username,
+        avatar: response.avatar,
+        index: response.index,
+        rate: response.rate,
+        meta: response.meta,
+        id: response.user_id,
+      }
+    })
+    .catch((error) => {
+      console.error('请求失败:', error.response?.status, error.message)
+      throw error
+    })
 }
-
-
-export const sendEmailCodeApi = async (email_address: string) => {
- return await request({
-  url: API.EMAILCODE,
-  method: "GET",
-  params: {
-    "email": email_address
-  }
- })
-}
-
 
 export const getStaticsUrlApi = async (belong: string) => {
   return await request({
     url: API.CHARSTATICURL,
-    method: "GET",
+    method: 'GET',
     params: {
-      belong: belong
-    }
+      belong: belong,
+    },
   })
 }
 
-export const getGeneratedVoiceApi = async (text: string, character: string, belong: string, lang: string="zh") => {
+export const getGeneratedVoiceApi = async (
+  text: string,
+  character: string,
+  belong: string,
+  lang: string = 'zh',
+) => {
   return await request({
     url: API.GENERATE_VOICE,
-    method: "GET",
+    method: 'GET',
     params: {
       text: text,
       character: character,
       belong: belong,
       lang: lang,
-    }
+    },
+  })
+}
+
+export const getAudioRecordsApi = async () => {
+  return await request({
+    url: API.GET_AUDIO_RECORDS,
+    method: 'GET',
+  })
+}
+
+export const getHiToKiToApi = async (category: string) => {
+  return await request({
+    url: API.HITOKITO_API,
+    method: 'GET',
+    params: {
+      c: category,
+    },
+  })
+    .then((response) => {
+      console.log('请求成功:', response)
+      return {
+        href: response.href,
+        text: response.innerText,
+      }
+    })
+    .catch((error) => {
+      console.error('请求失败:', error.response?.status, error.message)
+      throw error
+    })
+}
+
+export const deleteAudioRecordApi = async (audio_id: number) => {
+  return await request({
+    url: API.DELETE_AURIO_RECORD,
+    method: 'GET',
+    params: {
+      audio_id: audio_id,
+    },
+  })
+}
+
+export const deleteAudioRecordsApi = async (audio_ids: any) => {
+  return await request({
+    url: API.DELETE_AURIO_RECORDS,
+    method: 'GET',
+    params: {
+      audio_ids: audio_ids,
+    },
   })
 }

@@ -14,7 +14,6 @@
       </template>
     </el-autocomplete>
 
-
     <!-- 功能按钮列表 -->
     <div class="feature-grid">
       <div
@@ -29,17 +28,28 @@
         <span>{{ feature.name }}</span>
       </div>
     </div>
-  </div>
 
+    <!-- 一言 -->
+    <p id="hitokoto">
+      <a :href="hitokitoHref" id="hitokoto_text">{{ hitokitoText }}</a>
+    </p>
+  </div>
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import GenShinLogo from '@/assets/genshin_logo.jpg'
 import StarRailLogo from '@/assets/starrail_logo.jpg'
+import { getHiToKiToApi } from '@/api'
 
+const hitokitoHref = ref('')
+const hitokitoText = ref('')
+const hitokitoCategories = ['a', 'b', 'c', 'd', 'h', 'i', 'k']
+const timerId = ref(null)
+const interval = 30 * 60 * 1000 // 1800000毫秒
+const immediateExecution = true // 设为false则首次不立即执行
 
 // import Icons from 'unplugin-icons/vite'
 const handleOpen = (key: string, keyPath: string[]) => {
@@ -51,6 +61,34 @@ const handleClose = (key: string, keyPath: string[]) => {
 
 const router = useRouter()
 const searchQuery = ref('')
+
+const getHiToKiTo = async () => {
+  const randomKey = Math.floor(Math.random() * hitokitoCategories.length)
+  var res = await getHiToKiToApi(hitokitoCategories[randomKey])
+  hitokitoHref.value = res.href
+  hitokitoText.value = res.text
+}
+
+// 启动定时器
+const startTimer = () => {
+  if (timerId.value) clearInterval(timerId.value)
+  if (immediateExecution) getHiToKiTo()
+
+  timerId.value = setInterval(() => {
+    getHiToKiTo()
+  }, interval)
+}
+
+// // 组件挂载时启动
+// onMounted(startTimer)
+
+// // 组件卸载时清理
+// onUnmounted(() => {
+//   if (timerId.value) {
+//     clearInterval(timerId.value)
+//     timerId.value = null
+//   }
+// })
 
 // 功能列表数组
 const features = ref([
