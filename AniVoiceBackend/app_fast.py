@@ -77,7 +77,20 @@ else:
     logging.warning("Mail service is disabled because MAIL_USERNAME or MAIL_PASSWORD is not configured.")
 
 
-addr = f"http://{settings.HOST}:{settings.PORT}"
+def build_base_url(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
+def join_url_path(*parts: str) -> str:
+    normalized = [part.strip("/\\") for part in parts if part]
+    return "/".join(normalized)
+
+
+def database_error_response(message: str = "数据库连接失败，请检查 PostgreSQL 配置") -> JSONResponse:
+    return JSONResponse(
+        content={"code": "-500", "message": message},
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 # 读取角色-模型数据
@@ -140,17 +153,28 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # ----------------------- 中间件 -----------------------
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        logging.error(f"Unhandled server error: {exc}", exc_info=True)
+        response = JSONResponse(
+            content={"code": "-500", "message": "服务器内部错误"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 
 # ----------------------- 路由部分 -----------------------
 @app.post("/login", response_model=LoginResponse)
-async def login(form: LoginRequest = Body(...)):
+async def login(request: Request, form: LoginRequest = Body(...)):
     logging.info('post for login')
-    
-    user = await user_manager.get_user_by_email(form.email)
+
+    try:
+        user = await user_manager.get_user_by_email(form.email)
+    except Exception as exc:
+        logging.error(f"Database error during login: {exc}", exc_info=True)
+        return database_error_response()
     
     if not user:
         return JSONResponse(
@@ -173,7 +197,8 @@ async def login(form: LoginRequest = Body(...)):
         settings.UPLOAD_ICONS_LOCAL_DIR, 
         user.pic
     )
-    avatar_url = f"{addr}/{avatar_path}"
+    base_url = build_base_url(request)
+    avatar_url = f"{base_url}/{avatar_path.replace(os.sep, '/')}"
     
     return {
         "code": "1",
@@ -277,7 +302,12 @@ async def logout(
 
 @app.get("/get_salt")
 async def get_salt(email: str):
-    user = await user_manager.get_user_by_email(email)
+    try:
+        user = await user_manager.get_user_by_email(email)
+    except Exception as exc:
+        logging.error(f"Database error during get_salt: {exc}", exc_info=True)
+        return database_error_response()
+
     if not user:
         return JSONResponse(
             content={"code": "3", "message": "该用户不存在, 请注册"},
@@ -287,7 +317,11 @@ async def get_salt(email: str):
 
 
 @app.get('/generate_voice')
-async def generate_voice(current_user: UserItem = Depends(get_current_user), form: TTSRequest = Body(...)):
+async def generate_voice(
+    request: Request,
+    current_user: UserItem = Depends(get_current_user),
+    form: TTSRequest = Body(...)
+):
     logging.info(f'current user: {current_user}')
 
     if form.belong not in character_dic:
@@ -331,7 +365,7 @@ async def generate_voice(current_user: UserItem = Depends(get_current_user), for
     audio_dir = Path(settings.GENERATED_AUDIO_DIR)
     audio_dir.mkdir(parents=True, exist_ok=True)
     audio_path = audio_dir / (unique_id + '.wav')
-    audio_local_path = os.path.join(settings.GENERATED_AUDIO_LOCAL_DIR, unique_id + '.wav')
+    audio_local_path = join_url_path(settings.GENERATED_AUDIO_LOCAL_DIR, unique_id + '.wav')
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         # 发送异步请求到TTS服务
@@ -368,7 +402,8 @@ async def generate_voice(current_user: UserItem = Depends(get_current_user), for
             asyncio.create_task(save_wav_bytes(audio_data, audio_path))
 
         logging.info(f"successfully write audio into path : {audio_path}")     
-        local_audio_url = f"{addr}/{audio_local_path}"      
+        base_url = build_base_url(request)
+        local_audio_url = f"{base_url}/{audio_local_path}"
         return {"code": 1, "audio_url": local_audio_url, "message": "语音生成成功"}
             
 
@@ -395,7 +430,7 @@ async def download_file(filename: str):
 
 
 @app.get("/get_belong_statics")
-async def get_belong_statics(belong: Optional[str] = Query(None)):
+async def get_belong_statics(request: Request, belong: Optional[str] = Query(None)):
     logging.info(f"get belong statics for {belong}")
     if belong not in character_dic:
         # 不支持的IP
@@ -413,11 +448,12 @@ async def get_belong_statics(belong: Optional[str] = Query(None)):
         logging.info(f"length of stands ({len(stands)}) != length of avators ({len(avators)})")
         return JSONResponse(content={"code" : "-2", "messaage": "角色数量不匹配"}, status_code=500)
 
+    base_url = build_base_url(request)
     names, stand_urls, avator_urls = [], [], []
     for stand, avator in zip(stands, avators):
         names.append(os.path.splitext(os.path.basename(stand))[0])
-        stand_urls.append(f"{addr}/{os.path.join(settings.STANDS_LOCAL_DIR, belong, os.path.basename(stand))}")
-        avator_urls.append(f"{addr}/{os.path.join(settings.CHARACTER_AVATOR_LOCAL_DIR, belong,  os.path.basename(avator))}")
+        stand_urls.append(f"{base_url}/{join_url_path(settings.STANDS_LOCAL_DIR, belong, os.path.basename(stand))}")
+        avator_urls.append(f"{base_url}/{join_url_path(settings.CHARACTER_AVATOR_LOCAL_DIR, belong, os.path.basename(avator))}")
 
     return {"code": 1, "names": names, "stands": stand_urls, "avators": avator_urls}
 
@@ -425,4 +461,4 @@ async def get_belong_statics(belong: Optional[str] = Query(None)):
 # -------------------------- 启动部分 -----------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app_fast:app", host="0.0.0.0", port=settings.PORT, reload=True)
+    uvicorn.run("app_fast:app", host="0.0.0.0", port=settings.APP_PORT, reload=True)

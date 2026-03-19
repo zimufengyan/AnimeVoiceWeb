@@ -24,9 +24,13 @@ def _build_postgres_uri(
 
 
 class Config:
-    # IP地址
-    HOST: str = os.getenv("APP_HOST", "10.60.102.53")
-    PORT: int = int(os.getenv("APP_PORT", "25683"))
+    # # 远程 Ollama 服务地址
+    # HOST: str = os.getenv("OLLAMA_HOST", "10.60.102.53")
+    # PORT: int = int(os.getenv("OLLAMA_PORT", "25683"))
+
+    # 当前后端服务地址
+    APP_HOST: str = os.getenv("APP_HOST", "127.0.0.1")
+    APP_PORT: int = int(os.getenv("APP_PORT", "98898"))
 
     # Postgres 数据库配置
     DATABASE_NAME: str = os.getenv("POSTGRES_DB", "postgres")
@@ -105,9 +109,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # IP地址
-    HOST: str = Field(default="10.60.102.53", validation_alias="APP_HOST")
-    PORT: int = Field(default=25683, validation_alias="APP_PORT")
+    # 远程 Ollama 服务地址
+    HOST: str = Field(default="10.60.102.53", validation_alias="OLLAMA_HOST")
+    PORT: int = Field(default=25683, validation_alias="OLLAMA_PORT", ge=0, le=65535)
+
+    # 当前后端服务地址
+    APP_HOST: str = Field(default="127.0.0.1", validation_alias="APP_HOST")
+    APP_PORT: int = Field(default=25683, validation_alias="APP_PORT", ge=0, le=65535)
 
     # Postgres 数据库配置
     DATABASE_NAME: str = Field(default="postgres", validation_alias="POSTGRES_DB")
@@ -115,12 +123,12 @@ class Settings(BaseSettings):
     DATABASE_USER: str = Field(default="postgres", validation_alias="POSTGRES_USER")
     DATABASE_PD: str = Field(default="", validation_alias="POSTGRES_PASSWORD")
     DATABASE_HOST: str = Field(default="localhost", validation_alias="POSTGRES_HOST")
-    DATABASE_PORT: int = Field(default=5432, validation_alias="POSTGRES_PORT")
+    DATABASE_PORT: int = Field(default=5432, validation_alias="POSTGRES_PORT", ge=0, le=65535)
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
 
     # Redis 配置
     REDIS_HOST: str = Field(default="localhost", validation_alias="REDIS_HOST")
-    REDIS_PORT: int = Field(default=6379, validation_alias="REDIS_PORT")
+    REDIS_PORT: int = Field(default=6379, validation_alias="REDIS_PORT", ge=0, le=65535)
     REDIS_DB: int = Field(default=2, validation_alias="REDIS_DB")
 
     ACCESS_TOKEN_EXPIRES: timedelta = timedelta(days=1)
@@ -147,7 +155,7 @@ class Settings(BaseSettings):
 
     # 邮箱配置
     MAIL_SERVER: str = Field(default="smtp.163.com", validation_alias="MAIL_SERVER")
-    MAIL_PORT: int = Field(default=465, validation_alias="MAIL_PORT")
+    MAIL_PORT: int = Field(default=465, validation_alias="MAIL_PORT", ge=0, le=65535)
     MAIL_USE_SSL: bool = Field(default=True, validation_alias="MAIL_USE_SSL")
     MAIL_USE_TLS: bool = Field(default=False, validation_alias="MAIL_USE_TLS")
     MAIL_USERNAME: str = Field(default="", validation_alias="MAIL_USERNAME")

@@ -1,7 +1,10 @@
 import { request } from '@/util/request'
 import type { LoginForm, RegisterForm, LoginFormPhone, LoginResponseData } from './util/types'
 
-const BASEURL = 'http://10.60.102.53:25683'
+const API_PORT = import.meta.env.VITE_API_PORT || '25683'
+const BASEURL =
+  (import.meta.env.VITE_API_ORIGIN as string | undefined)?.replace(/\/$/, '') ||
+  `${window.location.protocol}//${window.location.hostname}:${API_PORT}`
 
 enum API {
   LOGIN = `${BASEURL}/login`,
