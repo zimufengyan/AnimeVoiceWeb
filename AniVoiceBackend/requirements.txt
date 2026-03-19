@@ -4,3 +4,13 @@ flask_cors==5.0.0
 flask_jwt_extended==4.7.1
 flask_mail==0.10.0
 redis==5.2.1
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+httpx==0.28.1
+aiofiles==24.1.0
+python-jose==3.3.0
+passlib[bcrypt]==1.7.4
+pydantic-settings==2.7.0
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+fastapi-mail==1.4.2

@@ -1,21 +1,23 @@
 # 基于FastAPI的实现版本
 
-from datetime import datetime, timedelta
-from typing import Optional
+import glob
 import json
 import logging
 import os
-import redis
-import aiofiles
 import uuid
-import glob
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Body, Query
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+
+import aiofiles
+import httpx
+import redis
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
-from pathlib import Path
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -32,7 +34,7 @@ db_config = DatabaseConfig(settings.SQLALCHEMY_DATABASE_URI)
 user_manager = UserManager(db_config)
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")    # 挂载静态文件目录
+app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")    # 挂载静态文件目录
 
 # CORS 配置
 app.add_middleware(
@@ -59,23 +61,27 @@ redis_client = redis.StrictRedis(
 configure_root_logger(logging.DEBUG)
 
 # 邮件客户端配置
-mail_conf = ConnectionConfig(
-    MAIL_USERNAME=settings.MAIL_USERNAME,
-    MAIL_PASSWORD=settings.MAIL_PASSWORD,
-    MAIL_FROM=settings.MAIL_USERNAME,
-    MAIL_PORT=settings.MAIL_PORT,
-    MAIL_SERVER=settings.MAIL_SERVER,
-    MAIL_STARTTLS=settings.MAIL_USE_TLS,
-    MAIL_SSL_TLS=settings.MAIL_USE_SSL,
-)
-fast_mail = FastMail(mail_conf)
+fast_mail = None
+if settings.MAIL_USERNAME and settings.MAIL_PASSWORD:
+    mail_conf = ConnectionConfig(
+        MAIL_USERNAME=settings.MAIL_USERNAME,
+        MAIL_PASSWORD=settings.MAIL_PASSWORD,
+        MAIL_FROM=settings.MAIL_USERNAME,
+        MAIL_PORT=settings.MAIL_PORT,
+        MAIL_SERVER=settings.MAIL_SERVER,
+        MAIL_STARTTLS=settings.MAIL_USE_TLS,
+        MAIL_SSL_TLS=settings.MAIL_USE_SSL,
+    )
+    fast_mail = FastMail(mail_conf)
+else:
+    logging.warning("Mail service is disabled because MAIL_USERNAME or MAIL_PASSWORD is not configured.")
 
 
-addr = f'http://{settings.HOST}:{settings.PORT}'
+addr = f"http://{settings.HOST}:{settings.PORT}"
 
 
 # 读取角色-模型数据
-character_info_path = "./character_info.json"
+character_info_path = os.path.join(settings.BASE_DIR, "character_info.json")
 with open(character_info_path, 'r', encoding='utf-8') as f:
     character_dic = json.loads(f.read())
     logging.info("successfuy load character_info.json")
@@ -183,6 +189,12 @@ async def login(form: LoginRequest = Body(...)):
 @app.get('/get_email_code')
 async def get_email_code(email: str):
     logging.info(f'get email code for {email}')
+    if fast_mail is None:
+        return JSONResponse(
+            content={"code": -1, "message": "邮件服务未配置，请先设置 MAIL_USERNAME 和 MAIL_PASSWORD"},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
     # 验证邮箱格式
     if not validate_email(email):
         return JSONResponse(content={"code" : "-1", "messaage": "邮箱格式错误"}, status_code=201)
@@ -293,9 +305,9 @@ async def generate_voice(current_user: UserItem = Depends(get_current_user), for
         # 角色改变，重新设置模型
         # prepare SOVITS backend
         logging.info(f"set model for character: {form.character}")
-        succ1, _ = await async_execute_request(url=app.config["SOVITS_SET_GPT_API"], 
+        succ1, _ = await async_execute_request(url=settings.SOVITS_SET_GPT_API, 
                         param={'weights_path': model_info['gpt_weights_path']})
-        succ2, _ = await async_execute_request(url=app.config["SOVITS_SET_VIT_API"], 
+        succ2, _ = await async_execute_request(url=settings.SOVITS_SET_VIT_API, 
                         param={'weights_path': model_info['sovits_weights_path']})
         if not succ1 or not succ2:
             return JSONResponse(content={"code" : "-1", "messaage": "无法连接GPT-SoVITS"}, status_code=500)
@@ -309,21 +321,22 @@ async def generate_voice(current_user: UserItem = Depends(get_current_user), for
         text = form.text, text_lang=form.lang, ref_audio_path=model_info['ref_audio_path'],
         prompt_lang=model_info['promot_lang'], prompt_text=prompt_text
     )
-    # succ, response = await async_execute_request(app.config["SOVITS_TTS_API"], 
+    # succ, response = await async_execute_request(settings.SOVITS_TTS_API, 
     #                                             param=form.to_dict())
     # if not succ:
     #     return JSONResponse(content={"code" : "-1", "messaage": "无法连接GPT-SoVITS"}, status_code=500)
     # logging.info('successfully generate voice')
 
     unique_id = str(uuid.uuid4())
-    audio_dir = Path(app.config["GENERATED_AUDIO_DIR"])
+    audio_dir = Path(settings.GENERATED_AUDIO_DIR)
+    audio_dir.mkdir(parents=True, exist_ok=True)
     audio_path = audio_dir / (unique_id + '.wav')
-    audio_local_path = os.path.join(app.config["GENERATED_AUDIO_LOCAL_DIR"], unique_id + '.wav')
+    audio_local_path = os.path.join(settings.GENERATED_AUDIO_LOCAL_DIR, unique_id + '.wav')
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         # 发送异步请求到TTS服务
         response = await client.post(
-            app.config["SOVITS_TTS_API"],
+            settings.SOVITS_TTS_API,
             json=tts_data.to_dict(),
             headers={"Content-Type": "application/json"}
         )
@@ -412,4 +425,4 @@ async def get_belong_statics(belong: Optional[str] = Query(None)):
 # -------------------------- 启动部分 -----------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app_fast:app", host='0.0.0.0', port=5000, reload=True, workers=4)
+    uvicorn.run("app_fast:app", host="0.0.0.0", port=settings.PORT, reload=True)

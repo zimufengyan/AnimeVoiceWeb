@@ -12,6 +12,7 @@ AniVoiceBackend/pretrained_model
 *.pyc
 *.sqlite
 .env
+AniVoiceBackend/.env
 .venv
 .DS_Store
 
