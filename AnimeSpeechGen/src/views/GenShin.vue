@@ -121,10 +121,17 @@
 import { ref, onBeforeMount, watch } from 'vue'
 import { getStaticsUrlApi, getGeneratedVoiceApi } from '@/api'
 import { Icon } from '@iconify/vue'
-import { fa, tr } from 'element-plus/es/locales.mjs'
 import { ElMessage } from 'element-plus'
 import { ArrowLeftBold, ArrowRightBold } from '@element-plus/icons-vue'
 import type { ElScrollbar } from 'element-plus'
+import type { BelongStaticsResponseData } from '@/util/types'
+
+type CharacterState = {
+  name: string
+  url: string
+  avator: string
+  index: number
+}
 
 const belong = 'GenShin'
 const nameKey = belong + '-Names'
@@ -133,12 +140,12 @@ const standsKey = belong + '-Stands'
 const textareaKey = belong + '-Textarea'
 const apiOrigin = (import.meta.env.VITE_API_ORIGIN as string | undefined)?.replace(/\/$/, '')
 const searchQuery = ref('')
-const chooseCharacter = ref({ name: '', url: '', avator: '', index: 0 })
+const chooseCharacter = ref<CharacterState>({ name: '', url: '', avator: '', index: 0 })
 const textarea = ref(localStorage.getItem(textareaKey) || '')
 const isDownloadAvilabel = ref(true)
 const latestVoiceUrl = ref('')
-const audio_url = ref()
-const audioPlayer = ref(null) // 音频组件 ref
+const audio_url = ref('')
+const audioPlayer = ref<HTMLAudioElement | null>(null) // 音频组件 ref
 const isGeneratingVoice = ref(false)
 
 watch(textarea, (value) => {
@@ -149,18 +156,15 @@ watch(textarea, (value) => {
 const scrollbarRef = ref<InstanceType<typeof ElScrollbar> | null>(null)
 
 const getCharacterNamesFromLovalStorage = () => {
-  const storeNames = localStorage.getItem(nameKey)?.split(',')
-  return storeNames
+  return localStorage.getItem(nameKey)?.split(',') || []
 }
 
 const getImageUrlsFromLocalStorage = () => {
-  const storedUrls = localStorage.getItem(standsKey)?.split(',')
-  return storedUrls
+  return localStorage.getItem(standsKey)?.split(',') || []
 }
 
 const getCharacterAvatorsFromLocalStorage = () => {
-  const storeAvators = localStorage.getItem(avatorKey)?.split(',')
-  return storeAvators
+  return localStorage.getItem(avatorKey)?.split(',') || []
 }
 
 const clearImageCache = () => {
@@ -185,9 +189,9 @@ if (hasStaleImageCache()) {
   clearImageCache()
 }
 
-var names = ref(getCharacterNamesFromLovalStorage())
-var standUrls = ref(getImageUrlsFromLocalStorage()) // {}
-var avatorUrls = ref(getCharacterAvatorsFromLocalStorage())
+const names = ref<string[]>(getCharacterNamesFromLovalStorage())
+const standUrls = ref<string[]>(getImageUrlsFromLocalStorage())
+const avatorUrls = ref<string[]>(getCharacterAvatorsFromLocalStorage())
 // var names = ref()
 // var standUrls = ref() // {}
 // var avatorUrls = ref()
@@ -196,6 +200,9 @@ console.log(names.value)
 
 // 从字典中随机获取一个元素
 const getRandomImage = () => {
+  if (names.value.length === 0 || standUrls.value.length === 0 || avatorUrls.value.length === 0) {
+    return
+  }
   const randomKey = Math.floor(Math.random() * names.value.length)
   const randomUrl = standUrls.value[randomKey] // 通过图片名称获取对应的立绘 URL
   const randomAvator = avatorUrls.value[randomKey] // 通过图片名称获取对应的头像 URL
@@ -208,12 +215,12 @@ const getRandomImage = () => {
 // 从后端请求图片 URLs 并存储到 localStorage
 const fetchImageUrls = async () => {
   await getStaticsUrlApi(belong)
-    .then((response) => {
+    .then((response: BelongStaticsResponseData) => {
       if (response.names) {
         // 存储获取到的图片 URLs 到 localStorage
-        localStorage.setItem(nameKey, response.names)
-        localStorage.setItem(standsKey, response.stands)
-        localStorage.setItem(avatorKey, response.avators)
+        localStorage.setItem(nameKey, response.names.join(','))
+        localStorage.setItem(standsKey, response.stands.join(','))
+        localStorage.setItem(avatorKey, response.avators.join(','))
         names.value = response.names
         standUrls.value = response.stands
         avatorUrls.value = response.avators
@@ -248,16 +255,16 @@ const handleGenerateBtn = async () => {
       message: response.message || '语音生成成功',
       type: 'success',
     })
-    audio_url.value = response.audio_url
-    if (audioPlayer.value) {
-      audioPlayer.value.src = audio_url.value
-    }
-    isDownloadAvilabel.value = true
-  } catch (error) {
+      audio_url.value = response.audio_url
+      if (audioPlayer.value) {
+        audioPlayer.value.src = audio_url.value
+      }
+      isDownloadAvilabel.value = true
+  } catch (error: unknown) {
     isDownloadAvilabel.value = false
-    console.log(error.message)
+    console.log(error instanceof Error ? error.message : error)
     ElMessage({
-      message: error.message || '语音生成失败',
+      message: error instanceof Error ? error.message : '语音生成失败',
       type: 'error',
     })
   } finally {
@@ -279,7 +286,7 @@ const getServerFileName = async () => {
 }
 
 const handleDownloadBtn = async () => {
-  if (!isDownloadAvilabel.value) {
+  if (!isDownloadAvilabel.value || !audio_url.value) {
     ElMessage({
       message: 'please generate a voice after downloading.',
       type: 'warning',
@@ -289,7 +296,7 @@ const handleDownloadBtn = async () => {
   // 优先获取服务器指定的文件名
   const serverName = await getServerFileName()
   // 备选方案：从URL提取
-  const fallbackName = audio_url.value.split('/').pop().split('?')[0]
+  const fallbackName = audio_url.value.split('/').pop()?.split('?')[0] || 'generated.wav'
 
   // const link = document.createElement('a');
   // link.href = audio_url.value;
@@ -318,7 +325,7 @@ const handleLeftClick = () => {
   console.log('Left button clicked')
   // 左侧按钮点击逻辑
   const currIndex = chooseCharacter.value.index
-  if (currIndex > 0) {
+  if (currIndex > 0 && currIndex - 1 < avatorUrls.value.length) {
     chooseCharacter.value.index = currIndex - 1
     chooseCharacter.value.avator = avatorUrls.value[currIndex - 1]
     chooseCharacter.value.name = names.value[currIndex - 1]
@@ -330,7 +337,7 @@ const handleRightClick = () => {
   console.log('Right button clicked')
   // 右侧按钮点击逻辑
   const currIndex = chooseCharacter.value.index
-  if (currIndex < names.value.length - 1) {
+  if (currIndex < names.value.length - 1 && currIndex + 1 < avatorUrls.value.length) {
     const nextIndex = currIndex + 1
     chooseCharacter.value.index = nextIndex
     chooseCharacter.value.avator = avatorUrls.value[nextIndex]
@@ -342,7 +349,7 @@ const handleRightClick = () => {
 const handleAvatorClick = (index: number) => {
   console.log('Clicked avator index:', index)
   // 更换立绘
-  if (0 <= index < names.value.length && index != chooseCharacter.value.index) {
+  if (index >= 0 && index < names.value.length && index !== chooseCharacter.value.index) {
     chooseCharacter.value.index = index
     chooseCharacter.value.name = names.value[index]
     chooseCharacter.value.url = standUrls.value[index]
@@ -351,6 +358,8 @@ const handleAvatorClick = (index: number) => {
     if (!scrollbarRef.value) return
 
     const scrollContainer = scrollbarRef.value.$el.querySelector('.el-scrollbar__wrap')
+    if (!scrollContainer) return
+
     const buttons = scrollContainer.querySelectorAll('.scrollbar-character-item')
 
     if (buttons.length > index) {
@@ -384,9 +393,12 @@ onBeforeMount(async () => {
 })
 
 // 搜索建议
-const querySearch = (queryString, cb) => {
+const querySearch = (
+  queryString: string,
+  cb: (results: Array<{ value: string }>) => void,
+) => {
   // 根据用户输入的 queryString 搜索 standUrls 中的键（即图片名称）
-  const results = Object.keys(standUrls.value)
+  const results = standUrls.value
     .filter((imageName) => imageName.toLowerCase().includes(queryString.toLowerCase()))
     .map((imageName) => ({
       value: imageName, // 这里返回图片名称，作为搜索建议
@@ -397,7 +409,7 @@ const querySearch = (queryString, cb) => {
 }
 
 // 处理选择搜索结果
-const handleSelect = (item: any) => {
+const handleSelect = (item: { value: string }) => {
   console.log(item)
 }
 </script>

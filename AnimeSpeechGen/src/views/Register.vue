@@ -105,16 +105,14 @@
 </template>
 
 <script lang="ts" setup>
-import { User, Lock, Close } from '@element-plus/icons-vue'
+import { User, Lock } from '@element-plus/icons-vue'
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RegisterForm, RegisterResponseData } from '@/util/types'
-import type { FormInstance, TabsPaneContext, FormRules } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElNotification } from 'element-plus'
 import { registerApi, sendEmailCodeApi } from '@/api'
 import bcrypt from 'bcryptjs'
-import { generateRandomString } from '@/util/utils'
-import { error } from 'console'
 
 const router = useRouter()
 const registerFormRef = ref<FormInstance>()
@@ -136,7 +134,7 @@ const registerFormSend: RegisterForm = {
 }
 
 // 验证码区域文字说明
-const spanRef = ref()
+const spanRef = ref<HTMLElement | null>(null)
 const isSendValidationCode = ref<string>('发送验证码')
 
 let registerResponse = reactive<RegisterResponseData>({
@@ -195,17 +193,21 @@ const registerRules = reactive<FormRules<RegisterForm>>({
 async function sendValidationCode(email: string) {
   // 若显示的发送验证码区域文字 不是 '发送验证码'，就直接返回不再执行
   if (!isSendValidationCode.value.endsWith('发送验证码')) return
-  await registerFormRef!.value.validateField('email') // 表单验证
+  if (!registerFormRef.value || !spanRef.value) return
+
+  await registerFormRef.value.validateField('email') // 表单验证
   // 重新发送逻辑
   isSendValidationCode.value = '60秒后重新发送'
-  spanRef.value.style = 'color: gray;' // 颜色变灰
+  spanRef.value.style.color = 'gray' // 颜色变灰
   const countDown = ref<number>(60) // 倒计时
   const temp = setInterval(() => {
     countDown.value--
     isSendValidationCode.value = countDown.value + '秒后重新发送'
     if (!countDown.value) {
       clearInterval(temp)
-      spanRef.value.style = 'color: #1764FF;' // 颜色变蓝
+      if (spanRef.value) {
+        spanRef.value.style.color = '#1764FF' // 颜色变蓝
+      }
       isSendValidationCode.value = '重新发送验证码'
       countDown.value = 60
     }
@@ -215,7 +217,7 @@ async function sendValidationCode(email: string) {
     .then((response) => {
       ElMessage({
         type: 'success',
-        message: response.meta.message,
+        message: response.meta?.message || response.message || '验证码发送成功',
       })
     })
     .catch((error) => {
@@ -224,14 +226,16 @@ async function sendValidationCode(email: string) {
 }
 
 const toRegister = async () => {
-  registerFormRef.value.validate(async (valid, fields) => {
+  if (!registerFormRef.value) return
+
+  registerFormRef.value.validate(async (valid) => {
     // valid:所有表单都通过校验  才为true
     // var valid_message = `验证结果: ${valid}`
     // console.log(valid_message)
     // 以valid作为判断条件，如果通过校验才执行登录
     if (valid) {
       // 前端密码加密
-      var ENCRYPTION_SALT = bcrypt.genSaltSync(12)
+      const ENCRYPTION_SALT = bcrypt.genSaltSync(12)
       const hashedPassword = bcrypt.hashSync(registerForm.password, ENCRYPTION_SALT)
       registerFormSend.email = registerForm.email
       registerFormSend.username = registerForm.username

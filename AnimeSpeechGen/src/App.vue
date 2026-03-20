@@ -10,18 +10,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { onBeforeMount, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/counter'
 import { getAudioRecordsApi, deleteAudioRecordApi, deleteAudioRecordsApi } from './api'
-
-type AudioRecord = {
-  audio_id: number
-  audio_character: string
-  audio_belong: string
-  audio_path: string
-  created_at?: string
-  audio_text: string
-  text_lang: string
-  character_avator_path: string
-  audio_filename: string
-}
+import type { AudioRecord } from '@/util/types'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -29,7 +18,7 @@ const router = useRouter()
 const audio_url = ref('')
 
 // 音频播放处理
-const handleAudioPlay = (audioRef, src) => {
+const handleAudioPlay = (audioRef: { value: HTMLAudioElement | null }, src: string) => {
   if (audioRef.value) {
     audioRef.value.pause() // 停止当前播放的音频
     audioRef.value.currentTime = 0 // 重置播放时间
@@ -37,15 +26,15 @@ const handleAudioPlay = (audioRef, src) => {
     audioRef.value.load() // 加载新音频
     audioRef.value.onloadedmetadata = () => {
       // 确保音频元数据加载完毕
-      audioRef.value.play().catch((error) => {
+      audioRef.value?.play().catch((error: unknown) => {
         console.error('播放音频时出错:', error)
       })
     }
   }
 }
 //英标播放器
-const audioElement = ref(null)
-const clickAudio = (data) => {
+const audioElement = ref<HTMLAudioElement | null>(null)
+const clickAudio = (data: string) => {
   console.log('url', data)
   handleAudioPlay(audioElement, data)
 }
@@ -150,7 +139,9 @@ const deleteSelectedAudioRecords = async () => {
       type: 'success',
       message: '批量删除成功',
     })
-  } catch (error) {}
+  } catch {
+    return
+  }
 }
 
 const showDrawer = async () => {
@@ -201,10 +192,10 @@ const downloadSelectedAudios = async () => {
       type: 'success',
       message: `已开始下载 ${selectedRecords.length} 条记录`,
     })
-  } catch (error) {
+  } catch (error: unknown) {
     ElMessage({
       type: 'error',
-      message: error.message || '批量下载失败',
+      message: error instanceof Error ? error.message : '批量下载失败',
     })
   }
 }
@@ -310,7 +301,7 @@ const formatTime = (time?: string) => {
             <div class="record-card-header">
               <el-checkbox
                 :model-value="isRecordSelected(record['audio_id'])"
-                @change="(checked) => toggleRecordSelection(record['audio_id'], checked)"
+                @change="(checked: string | number | boolean) => toggleRecordSelection(record['audio_id'], checked)"
               >
                 选择
               </el-checkbox>

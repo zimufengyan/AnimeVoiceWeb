@@ -111,21 +111,20 @@
 
 <script lang="ts" setup>
 import { User, Lock, Cellphone } from '@element-plus/icons-vue'
-import { onMounted, reactive, ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import type { LoginForm, LoginFormPhone, LoginResponseData, MetaForm } from '@/util/types'
+import type { GetSaltResponseData, LoginForm, LoginFormPhone, LoginResponseData } from '@/util/types'
 import type { FormInstance, TabsPaneContext, FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/counter'
 import bcrypt from 'bcryptjs'
-import { ElMessage, ElNotification } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import SlideVerify from '@/components/SlideVerify.vue'
 import DiyMask from '@/components/DiyMask.vue'
-import { generateRandomString } from '@/util/utils'
 import { getSaltApi } from '@/api'
 
 const sliderVisible = ref(false) //滑动验证ui
 const isVerified = ref(false)
-let maskRef = ref(null)
+const maskRef = ref<InstanceType<typeof DiyMask> | null>(null)
 const loginErrorTip = ref('')
 const showLoginError = ref(false)
 
@@ -209,7 +208,9 @@ const goToRegister = () => {
   router.push('/register')
 }
 const tologin = async () => {
-  loginFormRef.value.validate(async (valid, fields) => {
+  if (!loginFormRef.value) return
+
+  loginFormRef.value.validate(async (valid) => {
     // var valid_message = `验证结果: ${valid}`
     // console.log(valid_message)
 
@@ -222,12 +223,14 @@ const tologin = async () => {
 
       // 前端密码加密
       // 获取后端该用户的盐值
-      var saltReponse = await getSaltApi(loginForm.email).catch((error) => {
-        // ElMessage({ type: 'error', message: error.response?.status, error.message })
+      const saltResponse: GetSaltResponseData | void = await getSaltApi(loginForm.email).catch(() => {
         return
       })
-      console.log(saltReponse.salt)
-      var ENCRYPTION_SALT = saltReponse.salt
+      if (!saltResponse?.salt) {
+        return
+      }
+      console.log(saltResponse.salt)
+      const ENCRYPTION_SALT = saltResponse.salt
       const hashedPassword = bcrypt.hashSync(loginForm.password, ENCRYPTION_SALT)
       loginFormSend.email = loginForm.email
       loginFormSend.password = hashedPassword

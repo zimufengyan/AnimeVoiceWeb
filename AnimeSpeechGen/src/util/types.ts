@@ -25,6 +25,19 @@ export type MetaForm = {
   timestamp: string
 }
 
+export type AudioRecord = {
+  audio_id: number
+  user_id: number
+  audio_character: string
+  audio_belong: string
+  audio_path: string
+  created_at?: string
+  audio_text: string
+  text_lang: string
+  character_avator_path: string
+  audio_filename: string
+}
+
 export type LoginResponseData = {
   meta: MetaForm
   username: string
@@ -35,6 +48,13 @@ export type LoginResponseData = {
   id: string
 }
 
+export type GetSaltResponseData = {
+  salt: string
+  meta?: MetaForm
+  code?: string | number
+  message?: string
+}
+
 export type RegisterResponseData = {
   username: string
   avatar: string
@@ -42,4 +62,22 @@ export type RegisterResponseData = {
   rate: string
   meta: MetaForm
   id: string
+}
+
+export type GenerateVoiceResponseData = {
+  code: string | number
+  message: string
+  audio_url: string
+}
+
+export type BelongStaticsResponseData = {
+  code?: string | number
+  names: string[]
+  stands: string[]
+  avators: string[]
+}
+
+export type AudioRecordsResponseData = {
+  meta?: MetaForm
+  records: AudioRecord[]
 }

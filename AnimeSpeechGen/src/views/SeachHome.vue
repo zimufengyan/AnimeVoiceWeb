@@ -37,7 +37,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import GenShinLogo from '@/assets/genshin_logo.jpg'
@@ -47,7 +47,7 @@ import { getHiToKiToApi } from '@/api'
 const hitokitoHref = ref('')
 const hitokitoText = ref('')
 const hitokitoCategories = ['a', 'b', 'c', 'd', 'h', 'i', 'k']
-const timerId = ref(null)
+const timerId = ref<ReturnType<typeof setInterval> | null>(null)
 const interval = 30 * 60 * 1000 // 1800000毫秒
 const immediateExecution = true // 设为false则首次不立即执行
 
@@ -97,13 +97,16 @@ const features = ref([
 ])
 
 // 导航到指定页面
-const navigateTo = (route) => {
+const navigateTo = (route: string) => {
   console.log(`navigate to route: ${route}`)
   router.push(route)
 }
 
 // 搜索建议
-const querySearch = (queryString, cb) => {
+const querySearch = (
+  queryString: string,
+  cb: (results: Array<{ value: string; route: string }>) => void,
+) => {
   const results = features.value
     .filter((feature) => feature.name.includes(queryString)) // 匹配输入内容
     .map((feature) => ({ value: feature.name, route: feature.route })) // 返回 name 和 route
@@ -111,7 +114,7 @@ const querySearch = (queryString, cb) => {
 }
 
 // 处理选择搜索结果
-const handleSelect = (item) => {
+const handleSelect = (item: { route: string }) => {
   navigateTo(item.route)
 }
 

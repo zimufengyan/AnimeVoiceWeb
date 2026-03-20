@@ -1,7 +1,10 @@
 import router from '@/router'
-import { message } from 'ant-design-vue'
-import axios from 'axios'
+import axios, { type AxiosError, type AxiosRequestHeaders } from 'axios'
 import { ElMessage } from 'element-plus'
+
+type ApiError = Error & {
+  status?: number
+}
 
 axios.defaults.headers['Content-Type'] = 'application/json;charset=utf-8'
 
@@ -13,6 +16,7 @@ export const request = axios.create({
 //给request实例添加请求拦截器
 request.interceptors.request.use(
   (config) => {
+    config.headers = (config.headers || {}) as AxiosRequestHeaders
     config.headers['Access-Control-Allow-Origin'] = '*'
     // 如果需要携带 token，在这里添加
     const token = localStorage.getItem('token')
@@ -34,7 +38,7 @@ request.interceptors.response.use(
     return response.data
   },
   //失败响应：会返回错误对象，用来处理http网络错误
-  (error) => {
+  (error: AxiosError<{ message?: string; detail?: string }>) => {
     if (error.code === 'ECONNABORTED') {
       const timeoutError = new Error('请求超时，请稍后重试')
       ElMessage({
@@ -48,7 +52,9 @@ request.interceptors.response.use(
     if (error.response) {
       console.log('axios:' + error.response.status)
       const detail = error.response.data?.message || error.response.data?.detail || '未知错误'
-      const customError = new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+      const customError: ApiError = new Error(
+        typeof detail === 'string' ? detail : JSON.stringify(detail),
+      )
       customError.status = error.response.status
       let message = typeof detail === 'string' ? detail : JSON.stringify(detail)
       switch (error.response.status) {
@@ -57,7 +63,7 @@ request.interceptors.response.use(
           localStorage.removeItem('token')
           router.replace({
             path: '/login',
-            query: { redirect: router.currentRoute.fullPath }, // 重新登录后，返回之前的页面
+            query: { redirect: router.currentRoute.value.fullPath }, // 重新登录后，返回之前的页面
           })
           break
         case 403:
@@ -65,7 +71,7 @@ request.interceptors.response.use(
           localStorage.removeItem('token')
           router.replace({
             path: '/login',
-            query: { redirect: router.currentRoute.fullPath }, // 重新登录后，返回之前的页面
+            query: { redirect: router.currentRoute.value.fullPath }, // 重新登录后，返回之前的页面
           })
           break
         case 404:
