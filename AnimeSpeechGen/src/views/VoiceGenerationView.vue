@@ -21,28 +21,34 @@
         <div class="anime-stand-container">
           <div class="stand-iamge__lazy">
             <el-image
+              v-if="chooseCharacter.url"
               :key="chooseCharacter.name"
               :src="chooseCharacter.url"
               fit="scale-down"
               lazy
               class="main-stand-image"
             />
+            <el-empty
+              v-else
+              :description="emptyStateText"
+              class="empty-stand"
+            />
 
-            <!-- 左侧按钮 -->
             <el-button
               size="large"
               class="overlay-button left-btn"
               type="primary"
               :icon="ArrowLeftBold"
+              :disabled="!canSwitchCharacter"
               @click="handleLeftClick"
             />
 
-            <!-- 右侧按钮 -->
             <el-button
               size="large"
               class="overlay-button right-btn"
               type="primary"
               :icon="ArrowRightBold"
+              :disabled="!canSwitchCharacter"
               @click="handleRightClick"
             />
           </div>
@@ -67,21 +73,11 @@
               type="primary"
               :loading="isGeneratingVoice"
               @click="handleGenerateBtn"
-              >生成
+            >
+              生成
             </a-button>
-            <!-- <el-button
-              class="generate-btn"
-              v-loading="isGeneratingVoice"
-              @click="handleGenerateBtn"
-              type="primary"
-              >生成</el-button
-            > -->
-            <!-- <el-button class="download-btn" @click="handleDownloadBtn" type="primary"
-              >下载</el-button
-            > -->
           </div>
           <div class="audio-container">
-            <!-- <mini-audio :audio-source="audio_url"></mini-audio> -->
             <audio
               ref="audioPlayer"
               controls
@@ -90,16 +86,15 @@
               <source :src="audio_url" />
             </audio>
           </div>
-          <div class="characters-container">
+          <div class="characters-container" @wheel.prevent="handleCharacterWheel">
             <el-scrollbar ref="scrollbarRef">
               <div class="scrollbar-flex-content">
                 <el-button
                   v-for="(avator, index) in avatorUrls"
-                  :key="index"
+                  :key="`${belong}-${index}`"
                   class="scrollbar-character-item"
                   @click="handleAvatorClick(index)"
                 >
-                  <!-- {{ character }} -->
                   <el-image
                     :src="avator"
                     alt="character-icon"
@@ -118,13 +113,12 @@
 </template>
 
 <script lang="ts" setup>
-import { nextTick, ref, onBeforeMount, watch } from 'vue'
-import { getStaticsUrlApi, getGeneratedVoiceApi } from '@/api'
+import { computed, nextTick, onBeforeMount, ref, watch } from 'vue'
+import { getGeneratedVoiceApi, getStaticsUrlApi } from '@/api'
 import { Icon } from '@iconify/vue'
 import { ElMessage } from 'element-plus'
 import { ArrowLeftBold, ArrowRightBold } from '@element-plus/icons-vue'
 import type { ElScrollbar } from 'element-plus'
-import type { BelongStaticsResponseData } from '@/util/types'
 
 type CharacterState = {
   name: string
@@ -133,11 +127,48 @@ type CharacterState = {
   index: number
 }
 
-const characterNameAliasMap: Record<string, string> = {
-  'Kamizato Ayaka': 'Ayaka',
-  'Kamisato Ayaka': 'Ayaka',
-  'Yae Miko': 'YaeMiko',
+type ViewProps = {
+  belong: string
+  characterNameAliasMap?: Record<string, string>
 }
+
+const props = withDefaults(defineProps<ViewProps>(), {
+  characterNameAliasMap: () => ({}),
+})
+
+const searchQuery = ref('')
+const chooseCharacter = ref<CharacterState>({ name: '', url: '', avator: '', index: 0 })
+const latestVoiceUrl = ref('')
+const audio_url = ref('')
+const audioPlayer = ref<HTMLAudioElement | null>(null)
+const isGeneratingVoice = ref(false)
+const isDownloadAvilabel = ref(true)
+const scrollbarRef = ref<InstanceType<typeof ElScrollbar> | null>(null)
+const apiOrigin = (import.meta.env.VITE_API_ORIGIN as string | undefined)?.replace(/\/$/, '')
+
+const belong = computed(() => props.belong)
+const nameKey = computed(() => `${props.belong}-Names`)
+const avatorKey = computed(() => `${props.belong}-Avators`)
+const standsKey = computed(() => `${props.belong}-Stands`)
+const textareaKey = computed(() => `${props.belong}-Textarea`)
+const selectedCharacterKey = computed(() => `${props.belong}-SelectedCharacter`)
+const emptyStateText = computed(() => `${props.belong} 当前还没有可用角色资源`)
+const canSwitchCharacter = computed(() => names.value.length > 1)
+
+const textarea = ref(localStorage.getItem(textareaKey.value) || '')
+
+watch(textarea, (value) => {
+  localStorage.setItem(textareaKey.value, value || '')
+})
+
+watch(
+  () => chooseCharacter.value.name,
+  (value) => {
+    if (value) {
+      localStorage.setItem(selectedCharacterKey.value, value)
+    }
+  },
+)
 
 /**
  * 将前端展示名归一化为后端使用的标准角色键名。
@@ -146,63 +177,50 @@ const characterNameAliasMap: Record<string, string> = {
 const normalizeCharacterName = (name: string) => {
   const normalizedName = name.trim()
   if (!normalizedName) return normalizedName
-  return characterNameAliasMap[normalizedName] || normalizedName
+  return props.characterNameAliasMap[normalizedName] || normalizedName
 }
 
-const belong = 'GenShin'
-const nameKey = belong + '-Names'
-const avatorKey = belong + '-Avators'
-const standsKey = belong + '-Stands'
-const textareaKey = belong + '-Textarea'
-const selectedCharacterKey = belong + '-SelectedCharacter'
-const apiOrigin = (import.meta.env.VITE_API_ORIGIN as string | undefined)?.replace(/\/$/, '')
-const searchQuery = ref('')
-const chooseCharacter = ref<CharacterState>({ name: '', url: '', avator: '', index: 0 })
-const textarea = ref(localStorage.getItem(textareaKey) || '')
-const isDownloadAvilabel = ref(true)
-const latestVoiceUrl = ref('')
-const audio_url = ref('')
-const audioPlayer = ref<HTMLAudioElement | null>(null) // 音频组件 ref
-const isGeneratingVoice = ref(false)
-
-watch(textarea, (value) => {
-  localStorage.setItem(textareaKey, value || '')
-})
-
-watch(
-  () => chooseCharacter.value.name,
-  (value) => {
-    if (value) {
-      localStorage.setItem(selectedCharacterKey, value)
-    }
-  },
-)
-
-// 定义滚动条引用
-const scrollbarRef = ref<InstanceType<typeof ElScrollbar> | null>(null)
-
-const getCharacterNamesFromLovalStorage = () => {
-  return (localStorage.getItem(nameKey)?.split(',') || []).map(normalizeCharacterName)
+/**
+ * 从本地缓存中读取当前 IP 的角色名称列表。
+ * @returns 已归一化的角色名称数组。
+ */
+const getCharacterNamesFromLocalStorage = () => {
+  return (localStorage.getItem(nameKey.value)?.split(',') || []).map(normalizeCharacterName)
 }
 
+/**
+ * 从本地缓存中读取当前 IP 的立绘地址列表。
+ * @returns 立绘 URL 数组。
+ */
 const getImageUrlsFromLocalStorage = () => {
-  return localStorage.getItem(standsKey)?.split(',') || []
+  return localStorage.getItem(standsKey.value)?.split(',') || []
 }
 
+/**
+ * 从本地缓存中读取当前 IP 的头像地址列表。
+ * @returns 头像 URL 数组。
+ */
 const getCharacterAvatorsFromLocalStorage = () => {
-  return localStorage.getItem(avatorKey)?.split(',') || []
+  return localStorage.getItem(avatorKey.value)?.split(',') || []
 }
 
+/**
+ * 清理当前 IP 对应的角色静态资源缓存。
+ */
 const clearImageCache = () => {
-  localStorage.removeItem(nameKey)
-  localStorage.removeItem(standsKey)
-  localStorage.removeItem(avatorKey)
+  localStorage.removeItem(nameKey.value)
+  localStorage.removeItem(standsKey.value)
+  localStorage.removeItem(avatorKey.value)
 }
 
+/**
+ * 判断本地缓存中的资源地址是否仍然指向当前 API 源。
+ * @returns 如果检测到旧主机缓存则返回 true。
+ */
 const hasStaleImageCache = () => {
   const cachedStandUrls = getImageUrlsFromLocalStorage()
   const cachedAvatorUrls = getCharacterAvatorsFromLocalStorage()
-  const cachedUrls = [...(cachedStandUrls || []), ...(cachedAvatorUrls || [])].filter(Boolean)
+  const cachedUrls = [...cachedStandUrls, ...cachedAvatorUrls].filter(Boolean)
 
   if (cachedUrls.length === 0 || !apiOrigin) {
     return false
@@ -215,14 +233,9 @@ if (hasStaleImageCache()) {
   clearImageCache()
 }
 
-const names = ref<string[]>(getCharacterNamesFromLovalStorage())
+const names = ref<string[]>(getCharacterNamesFromLocalStorage())
 const standUrls = ref<string[]>(getImageUrlsFromLocalStorage())
 const avatorUrls = ref<string[]>(getCharacterAvatorsFromLocalStorage())
-// var names = ref()
-// var standUrls = ref() // {}
-// var avatorUrls = ref()
-console.log(names.value)
-// console.log(standUrls.value)
 
 /**
  * 将角色头像列表滚动到指定角色所在位置，并尽量让其显示在中间。
@@ -233,7 +246,7 @@ const centerCharacterInScroller = async (index: number) => {
 
   if (!scrollbarRef.value) return
 
-  const scrollContainer = scrollbarRef.value.$el.querySelector('.el-scrollbar__wrap')
+  const scrollContainer = scrollbarRef.value.$el.querySelector('.el-scrollbar__wrap') as HTMLElement | null
   if (!scrollContainer) return
 
   const buttons = scrollContainer.querySelectorAll('.scrollbar-character-item')
@@ -265,10 +278,12 @@ const applySelectedCharacterByIndex = async (index: number) => {
     return
   }
 
-  chooseCharacter.value.index = index
-  chooseCharacter.value.name = names.value[index]
-  chooseCharacter.value.url = standUrls.value[index]
-  chooseCharacter.value.avator = avatorUrls.value[index]
+  chooseCharacter.value = {
+    index,
+    name: names.value[index],
+    url: standUrls.value[index],
+    avator: avatorUrls.value[index],
+  }
   await centerCharacterInScroller(index)
 }
 
@@ -277,7 +292,7 @@ const applySelectedCharacterByIndex = async (index: number) => {
  * @returns 归一化后的角色键名。
  */
 const getSavedCharacterName = () => {
-  return normalizeCharacterName(localStorage.getItem(selectedCharacterKey) || '')
+  return normalizeCharacterName(localStorage.getItem(selectedCharacterKey.value) || '')
 }
 
 /**
@@ -285,6 +300,7 @@ const getSavedCharacterName = () => {
  */
 const restoreSelectedCharacter = async () => {
   if (names.value.length === 0 || standUrls.value.length === 0 || avatorUrls.value.length === 0) {
+    chooseCharacter.value = { name: '', url: '', avator: '', index: 0 }
     return
   }
 
@@ -300,64 +316,70 @@ const restoreSelectedCharacter = async () => {
   await applySelectedCharacterByIndex(randomKey)
 }
 
-// 从后端请求图片 URLs 并存储到 localStorage
 /**
  * 拉取当前 IP 的静态资源列表，并更新本地缓存。
  */
 const fetchImageUrls = async () => {
-  await getStaticsUrlApi(belong)
-    .then((response: BelongStaticsResponseData) => {
-      if (response.names) {
-        const normalizedNames = response.names.map(normalizeCharacterName)
-        // 存储获取到的图片 URLs 到 localStorage
-        localStorage.setItem(nameKey, normalizedNames.join(','))
-        localStorage.setItem(standsKey, response.stands.join(','))
-        localStorage.setItem(avatorKey, response.avators.join(','))
-        names.value = normalizedNames
-        standUrls.value = response.stands
-        avatorUrls.value = response.avators
-        console.log(names.value)
-      }
-    })
-    .catch((error) => {
-      console.error(error.message)
-      throw error
-    })
+  const response = await getStaticsUrlApi(props.belong)
+
+  if (!response.names) {
+    names.value = []
+    standUrls.value = []
+    avatorUrls.value = []
+    clearImageCache()
+    return
+  }
+
+  const normalizedNames = response.names.map(normalizeCharacterName)
+  localStorage.setItem(nameKey.value, normalizedNames.join(','))
+  localStorage.setItem(standsKey.value, response.stands.join(','))
+  localStorage.setItem(avatorKey.value, response.avators.join(','))
+  names.value = normalizedNames
+  standUrls.value = response.stands
+  avatorUrls.value = response.avators
 }
 
 /**
  * 向后端提交文本和角色信息，请求生成语音。
  */
 const handleGenerateBtn = async () => {
-  if (!textarea || textarea.value == '') {
+  if (!chooseCharacter.value.name) {
+    ElMessage({
+      message: `当前 ${props.belong} 还没有可生成的角色`,
+      type: 'warning',
+    })
+    return
+  }
+
+  if (!textarea.value) {
     ElMessage({
       message: 'please input text.',
       type: 'warning',
     })
     return
   }
+
   isGeneratingVoice.value = true
   try {
-    console.log(`current chosen character: ${chooseCharacter.value['name']}, belong ${belong}`)
     const response = await getGeneratedVoiceApi(
       textarea.value,
       chooseCharacter.value.name,
-      belong,
+      props.belong,
       'zh',
     )
-    console.log(response)
+
+    latestVoiceUrl.value = response.audio_url
+    audio_url.value = response.audio_url
+    if (audioPlayer.value) {
+      audioPlayer.value.src = audio_url.value
+    }
+    isDownloadAvilabel.value = true
     ElMessage({
       message: response.message || '语音生成成功',
       type: 'success',
     })
-      audio_url.value = response.audio_url
-      if (audioPlayer.value) {
-        audioPlayer.value.src = audio_url.value
-      }
-      isDownloadAvilabel.value = true
   } catch (error: unknown) {
     isDownloadAvilabel.value = false
-    console.log(error instanceof Error ? error.message : error)
     ElMessage({
       message: error instanceof Error ? error.message : '语音生成失败',
       type: 'error',
@@ -369,16 +391,15 @@ const handleGenerateBtn = async () => {
 
 /**
  * 读取当前音频资源的文件名，用于下载时优先沿用服务端命名。
+ * @returns 服务端文件名；如果无法解析则返回 null。
  */
 const getServerFileName = async () => {
   try {
     const response = await fetch(audio_url.value, { method: 'HEAD' })
     const disposition = response.headers.get('Content-Disposition')
-
-    // 从header解析：Content-Disposition: attachment; filename="sample.wav"
-    const fileNameMatch = disposition?.match(/filename="?(.+?)"?$/)
+    const fileNameMatch = disposition?.match(/filename=\"?(.+?)\"?$/)
     return fileNameMatch ? fileNameMatch[1] : null
-  } catch (e) {
+  } catch {
     return null
   }
 }
@@ -394,24 +415,14 @@ const handleDownloadBtn = async () => {
     })
     return
   }
-  // 优先获取服务器指定的文件名
+
   const serverName = await getServerFileName()
-  // 备选方案：从URL提取
-  const fallbackName = audio_url.value.split('/').pop()?.split('?')[0] || 'generated.wav'
+  const fallbackName =
+    latestVoiceUrl.value.split('/').pop()?.split('?')[0] ||
+    audio_url.value.split('/').pop()?.split('?')[0] ||
+    'generated.wav'
 
-  // const link = document.createElement('a');
-  // link.href = audio_url.value;
-  // link.download = serverName || fallbackName;
-
-  // document.body.appendChild(link);
-  // link.click();
-  // document.body.removeChild(link);
-  // 直接跳转至文件地址
-  //  window.location.href = audio_url.value;
-  // 主方案
   const newTab = window.open(audio_url.value, '_blank')
-
-  // 备用方案（1秒后检测是否被拦截）
   setTimeout(() => {
     if (!newTab || newTab.closed || newTab.document.readyState === 'complete') {
       const link = document.createElement('a')
@@ -426,8 +437,6 @@ const handleDownloadBtn = async () => {
  * 切换到左侧相邻角色。
  */
 const handleLeftClick = () => {
-  console.log('Left button clicked')
-  // 左侧按钮点击逻辑
   const currIndex = chooseCharacter.value.index
   if (currIndex > 0 && currIndex - 1 < avatorUrls.value.length) {
     applySelectedCharacterByIndex(currIndex - 1)
@@ -438,8 +447,6 @@ const handleLeftClick = () => {
  * 切换到右侧相邻角色。
  */
 const handleRightClick = () => {
-  console.log('Right button clicked')
-  // 右侧按钮点击逻辑
   const currIndex = chooseCharacter.value.index
   if (currIndex < names.value.length - 1 && currIndex + 1 < avatorUrls.value.length) {
     applySelectedCharacterByIndex(currIndex + 1)
@@ -451,51 +458,58 @@ const handleRightClick = () => {
  * @param index 被点击角色在头像列表中的索引。
  */
 const handleAvatorClick = (index: number) => {
-  console.log('Clicked avator index:', index)
-  // 更换立绘
   if (index >= 0 && index < names.value.length && index !== chooseCharacter.value.index) {
     applySelectedCharacterByIndex(index)
   }
 }
 
+/**
+ * 将鼠标滚轮的纵向滚动转换为角色头像列表的横向滚动。
+ * @param event 鼠标滚轮事件，优先使用 deltaY 作为横向滚动量。
+ */
+const handleCharacterWheel = (event: WheelEvent) => {
+  if (!scrollbarRef.value) return
+
+  const scrollContainer = scrollbarRef.value.$el.querySelector('.el-scrollbar__wrap') as HTMLElement | null
+  if (!scrollContainer) return
+
+  const scrollDelta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+  scrollContainer.scrollLeft += scrollDelta
+}
+
 onBeforeMount(async () => {
-  if (!names.value || names.value.length === 0) {
-    // 如果 standUrls 为空，从后端获取数据
-    console.log('get stands from backend.')
-    await fetchImageUrls() // 等待数据获取完成
+  if (!names.value.length) {
+    await fetchImageUrls()
   }
   await restoreSelectedCharacter()
-  console.log(chooseCharacter.value)
 })
 
-// 搜索建议
 /**
  * 根据搜索词过滤角色名称，并返回给自动完成组件。
  * @param queryString 当前输入框中的查询字符串。
  * @param cb Element Plus 自动完成组件的结果回调。
  */
-const querySearch = (
-  queryString: string,
-  cb: (results: Array<{ value: string }>) => void,
-) => {
-  // 根据用户输入的 queryString 搜索 standUrls 中的键（即图片名称）
-  const results = standUrls.value
-    .filter((imageName) => imageName.toLowerCase().includes(queryString.toLowerCase()))
-    .map((imageName) => ({
-      value: imageName, // 这里返回图片名称，作为搜索建议
+const querySearch = (queryString: string, cb: (results: Array<{ value: string }>) => void) => {
+  const normalizedQuery = queryString.trim().toLowerCase()
+  const results = names.value
+    .filter((name) => name.toLowerCase().includes(normalizedQuery))
+    .map((name) => ({
+      value: name,
     }))
 
-  // 返回搜索结果，通过回调函数 cb
   cb(results)
 }
 
-// 处理选择搜索结果
 /**
  * 处理自动完成面板中的搜索结果点击事件。
  * @param item 当前被选中的搜索项。
  */
 const handleSelect = (item: { value: string }) => {
-  console.log(item)
+  const selectedName = normalizeCharacterName(item.value)
+  const index = names.value.findIndex((name) => name === selectedName)
+  if (index >= 0) {
+    applySelectedCharacterByIndex(index)
+  }
 }
 </script>
 
@@ -512,19 +526,17 @@ const handleSelect = (item: { value: string }) => {
 .operation-container {
   margin-top: 18%;
   margin-right: 5%;
-  /* margin-left: 5%; */
 }
 
 .stand-iamge__lazy {
   max-height: 900px;
   margin-left: 10%;
-  position: relative; /* 关键：为绝对定位子元素提供参照 */
-  display: inline-block; /* 根据内容调整容器大小 */
-  /* overflow-y: auto; */
+  position: relative;
+  display: inline-block;
 }
 
 .main-stand-image {
-  display: block; /* 消除图片下方空隙 */
+  display: block;
 }
 
 .stand-iamge__lazy .el-image {
@@ -533,50 +545,45 @@ const handleSelect = (item: { value: string }) => {
   margin-bottom: 10px;
 }
 
+.empty-stand {
+  min-height: 420px;
+  width: min(100%, 720px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .overlay-button {
   position: absolute;
-  top: 50%; /* 垂直居中 */
+  top: 50%;
   transform: translateY(-50%);
-  z-index: 10; /* 确保按钮在图片上方 */
+  z-index: 10;
 }
 
 ::v-deep(.overlay-button) {
-  /* 移除边框 */
   border: 0 !important;
-  /* 透明背景 */
   background-color: transparent !important;
-  /* 移除内边距 */
   padding: 0 !important;
-  /* 移除最小宽度限制 */
   min-width: auto !important;
-  /* 移除点击效果 */
+
   &:active {
     transform: none;
   }
 
-  /* 移除hover效果
-  &:hover,
-  &:focus {
-    background-color: transparent !important;
-    box-shadow: none !important;
-  } */
-
-  /* 调整图标颜色 */
   .el-icon {
-    color: #409eff; /* 根据需求调整颜色 */
-    font-size: 36px; /* 调整图标尺寸 */
+    color: #409eff;
+    font-size: 36px;
   }
 }
 
 .left-btn {
-  left: 12%; /* 左侧间距 */
+  left: 12%;
 }
 
 .right-btn {
-  right: 12%; /* 右侧间距 */
+  right: 12%;
 }
 
-/* 可选：按钮悬停效果 */
 .overlay-button:hover {
   transform: translateY(-50%) scale(1.1);
   transition: transform 0.2s;
@@ -623,9 +630,6 @@ const handleSelect = (item: { value: string }) => {
   justify-content: center;
   padding-top: 5%;
   padding-bottom: 5%;
-  /* position: absolute;
-  left: 50%;
-  transform: translateX(-50%); */
   align-items: center;
 }
 
@@ -638,11 +642,7 @@ const handleSelect = (item: { value: string }) => {
 }
 
 ::v-deep(.el-input__inner) {
-  /* width: 80%; */
   height: 100%;
-  /* border-radius: 3rem; */
-  /* border: 1px solid #DCDFE6; */
-  /* padding: .5rem; */
 }
 
 ::v-deep(.el-input__wrapper) {
@@ -675,9 +675,6 @@ const handleSelect = (item: { value: string }) => {
   margin-top: 3%;
   text-align: center;
   border: #ffffff;
-  /* border-radius: 4px; */
-  /* background: var(--el-color-danger-light-9);
-  color: var(--el-color-danger); */
 }
 
 ::v-deep(.el-scrollbar__wrap) {

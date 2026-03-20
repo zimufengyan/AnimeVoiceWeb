@@ -40,9 +40,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
-import GenShinLogo from '@/assets/genshin_logo.jpg'
-import StarRailLogo from '@/assets/starrail_logo.jpg'
 import { getHiToKiToApi } from '@/api'
+import { voiceIpConfigs } from '@/config/voiceIp'
 
 const hitokitoHref = ref('')
 const hitokitoText = ref('')
@@ -91,10 +90,13 @@ const startTimer = () => {
 // })
 
 // 功能列表数组
-const features = ref([
-  { name: '原神', icon: GenShinLogo, route: '/genshin' },
-  { name: '崩坏·星穹铁道', icon: StarRailLogo, route: '/starrail' },
-])
+const features = ref(
+  voiceIpConfigs.map((config) => ({
+    name: config.displayName,
+    icon: config.icon,
+    route: config.routePath,
+  })),
+)
 
 // 导航到指定页面
 const navigateTo = (route: string) => {
