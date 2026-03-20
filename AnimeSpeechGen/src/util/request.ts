@@ -35,12 +35,22 @@ request.interceptors.response.use(
   },
   //失败响应：会返回错误对象，用来处理http网络错误
   (error) => {
+    if (error.code === 'ECONNABORTED') {
+      const timeoutError = new Error('请求超时，请稍后重试')
+      ElMessage({
+        showClose: true,
+        type: 'error',
+        message: timeoutError.message,
+      })
+      return Promise.reject(timeoutError)
+    }
+
     if (error.response) {
       console.log('axios:' + error.response.status)
-      const detail = error.response.data?.detail || '未知错误'
-      const customError = new Error(detail)
+      const detail = error.response.data?.message || error.response.data?.detail || '未知错误'
+      const customError = new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
       customError.status = error.response.status
-      let message = detail
+      let message = typeof detail === 'string' ? detail : JSON.stringify(detail)
       switch (error.response.status) {
         case 401:
           // Token 过期，跳转登录

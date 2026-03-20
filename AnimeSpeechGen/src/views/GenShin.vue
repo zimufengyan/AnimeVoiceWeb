@@ -118,7 +118,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onBeforeMount, onUpdated } from 'vue'
+import { ref, onBeforeMount, watch } from 'vue'
 import { getStaticsUrlApi, getGeneratedVoiceApi } from '@/api'
 import { Icon } from '@iconify/vue'
 import { fa, tr } from 'element-plus/es/locales.mjs'
@@ -130,14 +130,20 @@ const belong = 'GenShin'
 const nameKey = belong + '-Names'
 const avatorKey = belong + '-Avators'
 const standsKey = belong + '-Stands'
+const textareaKey = belong + '-Textarea'
+const apiOrigin = (import.meta.env.VITE_API_ORIGIN as string | undefined)?.replace(/\/$/, '')
 const searchQuery = ref('')
 const chooseCharacter = ref({ name: '', url: '', avator: '', index: 0 })
-const textarea = ref('')
+const textarea = ref(localStorage.getItem(textareaKey) || '')
 const isDownloadAvilabel = ref(true)
 const latestVoiceUrl = ref('')
 const audio_url = ref()
 const audioPlayer = ref(null) // 音频组件 ref
 const isGeneratingVoice = ref(false)
+
+watch(textarea, (value) => {
+  localStorage.setItem(textareaKey, value || '')
+})
 
 // 定义滚动条引用
 const scrollbarRef = ref<InstanceType<typeof ElScrollbar> | null>(null)
@@ -155,6 +161,28 @@ const getImageUrlsFromLocalStorage = () => {
 const getCharacterAvatorsFromLocalStorage = () => {
   const storeAvators = localStorage.getItem(avatorKey)?.split(',')
   return storeAvators
+}
+
+const clearImageCache = () => {
+  localStorage.removeItem(nameKey)
+  localStorage.removeItem(standsKey)
+  localStorage.removeItem(avatorKey)
+}
+
+const hasStaleImageCache = () => {
+  const cachedStandUrls = getImageUrlsFromLocalStorage()
+  const cachedAvatorUrls = getCharacterAvatorsFromLocalStorage()
+  const cachedUrls = [...(cachedStandUrls || []), ...(cachedAvatorUrls || [])].filter(Boolean)
+
+  if (cachedUrls.length === 0 || !apiOrigin) {
+    return false
+  }
+
+  return cachedUrls.some((url) => !url.startsWith(apiOrigin))
+}
+
+if (hasStaleImageCache()) {
+  clearImageCache()
 }
 
 var names = ref(getCharacterNamesFromLovalStorage())
@@ -206,24 +234,35 @@ const handleGenerateBtn = async () => {
     })
     return
   }
-  isGeneratingVoice.value = true // 显示加载
-  console.log(`current chosen character: ${chooseCharacter.value['name']}, belong ${belong}`)
-  var res = await getGeneratedVoiceApi(textarea.value, chooseCharacter.value.name, belong, 'zh')
-    .then((response) => {
-      console.log(response)
-      isGeneratingVoice.value = false
-      ElMessage({
-        message: response.meta.message,
-        type: 'success',
-      })
-      audio_url.value = response.audio_url
+  isGeneratingVoice.value = true
+  try {
+    console.log(`current chosen character: ${chooseCharacter.value['name']}, belong ${belong}`)
+    const response = await getGeneratedVoiceApi(
+      textarea.value,
+      chooseCharacter.value.name,
+      belong,
+      'zh',
+    )
+    console.log(response)
+    ElMessage({
+      message: response.message || '语音生成成功',
+      type: 'success',
+    })
+    audio_url.value = response.audio_url
+    if (audioPlayer.value) {
       audioPlayer.value.src = audio_url.value
-      // $refs.audioPlayer.src = this.audioUrl;
-      isDownloadAvilabel.value = true
+    }
+    isDownloadAvilabel.value = true
+  } catch (error) {
+    isDownloadAvilabel.value = false
+    console.log(error.message)
+    ElMessage({
+      message: error.message || '语音生成失败',
+      type: 'error',
     })
-    .catch((error) => {
-      console.log(error.message)
-    })
+  } finally {
+    isGeneratingVoice.value = false
+  }
 }
 
 const getServerFileName = async () => {
@@ -335,16 +374,6 @@ const handleAvatorClick = (index: number) => {
 }
 
 onBeforeMount(async () => {
-  if (!names.value || names.value.length === 0) {
-    // 如果 standUrls 为空，从后端获取数据
-    console.log('get stands from backend.')
-    await fetchImageUrls() // 等待数据获取完成
-  }
-  getRandomImage() // 在确保 standUrls, names, avators 有数据后调用
-  console.log(chooseCharacter.value)
-})
-
-onUpdated(async () => {
   if (!names.value || names.value.length === 0) {
     // 如果 standUrls 为空，从后端获取数据
     console.log('get stands from backend.')

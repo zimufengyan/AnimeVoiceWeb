@@ -1,7 +1,18 @@
 {
     "GenShin": {
+        "Arlecchino": {
+            "gpt_weights_path": "/opt/data/private/SpeechR/AniVoiceBackend/pretrained_model/GPT_weights_v2/Arlecchino-tts-v2-e20.ckpt",
+            "sovits_weights_path": "/opt/data/private/SpeechR/AniVoiceBackend/pretrained_model/SoVITS_weights_v2/Arlecchino-tts-v2_e18_s1476.pth",
+            "promot_lang": "zh",
+            "prompt_text_path": "/opt/data/private/SpeechR/AniVoiceBackend/static/ref_audios/GenShin/Arlecchino-ref.txt",
+            "ref_audio_path": "/opt/data/private/SpeechR/AniVoiceBackend/static/ref_audios/GenShin/Arlecchino-ref.wav"
+        },
         "YaeMiko": {
-
+            "gpt_weights_path": "/opt/data/private/SpeechR/AniVoiceBackend/pretrained_model/GPT_weights_v2/YaeMiko-v2-e16.ckpt",
+            "sovits_weights_path": "/opt/data/private/SpeechR/AniVoiceBackend/pretrained_model/SoVITS_weights_v2/YaeMiko-v2_e20_s3740.pth",
+            "promot_lang": "zh",
+            "prompt_text_path": "/opt/data/private/SpeechR/AniVoiceBackend/static/ref_audios/GenShin/YaeMiko-ref.txt",
+            "ref_audio_path": "/opt/data/private/SpeechR/AniVoiceBackend/static/ref_audios/GenShin/YaeMiko-ref.wav"
         },
         "Furina": {
             "gpt_weights_path": "/opt/data/private/SpeechR/AniVoiceBackend/pretrained_model/GPT_weights_v2/furina-tts-e20.ckpt",
@@ -9,6 +20,13 @@
             "promot_lang": "zh",
             "prompt_text_path": "/opt/data/private/SpeechR/AniVoiceBackend/static/ref_audios/GenShin/furina-ref.txt",
             "ref_audio_path": "/opt/data/private/SpeechR/AniVoiceBackend/static/ref_audios/GenShin/furina-ref.wav"
+        },
+        "Ayaka": {
+            "gpt_weights_path": "/opt/data/private/SpeechR/AniVoiceBackend/pretrained_model/GPT_weights_v2/Ayaka-v2-e16.ckpt  ",
+            "sovits_weights_path": "/opt/data/private/SpeechR/AniVoiceBackend/pretrained_model/SoVITS_weights_v2/Ayaka-v2_e18_s1926.pth",
+            "promot_lang": "zh",
+            "prompt_text_path": "/opt/data/private/SpeechR/AniVoiceBackend/static/ref_audios/GenShin/Ayaka-ref.txt",
+            "ref_audio_path": "/opt/data/private/SpeechR/AniVoiceBackend/static/ref_audios/GenShin/Ayaka-ref.wav"
         }
     },
     "StarRail": {

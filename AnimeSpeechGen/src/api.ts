@@ -120,16 +120,21 @@ export const getGeneratedVoiceApi = async (
   belong: string,
   lang: string = 'zh',
 ) => {
-  return await request({
+  const response = await request({
     url: API.GENERATE_VOICE,
-    method: 'GET',
-    params: {
+    method: 'POST',
+    timeout: 60000,
+    data: {
       text: text,
       character: character,
       belong: belong,
       lang: lang,
     },
   })
+  if (`${response.code}` !== '1' || !response.audio_url) {
+    throw new Error(response.message || '语音生成失败')
+  }
+  return response
 }
 
 export const getAudioRecordsApi = async () => {
@@ -170,12 +175,14 @@ export const deleteAudioRecordApi = async (audio_id: number) => {
   })
 }
 
-export const deleteAudioRecordsApi = async (audio_ids: any) => {
+export const deleteAudioRecordsApi = async (audio_ids: number[]) => {
+  const params = new URLSearchParams()
+  audio_ids.forEach((audioId) => {
+    params.append('audio_ids', `${audioId}`)
+  })
+
   return await request({
-    url: API.DELETE_AURIO_RECORDS,
+    url: `${API.DELETE_AURIO_RECORDS}?${params.toString()}`,
     method: 'GET',
-    params: {
-      audio_ids: audio_ids,
-    },
   })
 }

@@ -125,6 +125,7 @@ class Settings(BaseSettings):
     DATABASE_HOST: str = Field(default="localhost", validation_alias="POSTGRES_HOST")
     DATABASE_PORT: int = Field(default=5432, validation_alias="POSTGRES_PORT", ge=0, le=65535)
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
+    AUDIO_RECORD_EXPIRE: int = 7        # 音频记录的过期时间，单位为天
 
     # Redis 配置
     REDIS_HOST: str = Field(default="localhost", validation_alias="REDIS_HOST")
@@ -164,7 +165,7 @@ class Settings(BaseSettings):
     CODE_REDIS_KEY_PERFIX: str = Field(default="email_code:", validation_alias="CODE_REDIS_KEY_PREFIX")
 
     # GPT-SoVITS 配置
-    SOVITS_ADDR: str = Field(default="http://127.0.0.1:9880", validation_alias="SOVITS_ADDR")
+    SOVITS_ADDR: str = Field(default="http://10.60.102.53:25327", validation_alias="SOVITS_ADDR")
 
     POSTGRES_SERVICE_NAME: str = Field(default="", validation_alias="POSTGRES_SERVICE_NAME")
     POSTGRES_BIN_DIR: str = Field(default="", validation_alias="POSTGRES_BIN_DIR")

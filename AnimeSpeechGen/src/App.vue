@@ -1,16 +1,28 @@
 <script setup lang="ts">
-import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { RouterView, useRouter } from 'vue-router'
 import {
   CloudDownloadOutlined,
   PlayCircleOutlined,
   DownloadOutlined,
   DeleteOutlined,
 } from '@ant-design/icons-vue'
-import { ElMessageBox } from 'element-plus'
-import { onBeforeMount, ref, onUpdated } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { onBeforeMount, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/counter'
 import { getAudioRecordsApi, deleteAudioRecordApi, deleteAudioRecordsApi } from './api'
-import { de } from 'element-plus/es/locales.mjs'
+
+type AudioRecord = {
+  audio_id: number
+  audio_character: string
+  audio_belong: string
+  audio_path: string
+  created_at?: string
+  audio_text: string
+  text_lang: string
+  character_avator_path: string
+  audio_filename: string
+}
+
 const userStore = useUserStore()
 const router = useRouter()
 //初始音频地址
@@ -48,8 +60,44 @@ const gotoLogin = () => {
 
 const open = ref<boolean>(false)
 const isLogin = ref<boolean>(userStore.token !== '')
-const records = ref([])
+const records = ref<AudioRecord[]>([])
 const numRecords = ref(0)
+const selectedAudioIds = ref<number[]>([])
+
+const updateRecords = (nextRecords: AudioRecord[] = []) => {
+  records.value = nextRecords
+  numRecords.value = records.value.length
+  selectedAudioIds.value = selectedAudioIds.value.filter((audioId) =>
+    records.value.some((record) => record.audio_id === audioId),
+  )
+}
+
+const isRecordSelected = (audioId: number) => selectedAudioIds.value.includes(audioId)
+
+const toggleRecordSelection = (audioId: number, checked: string | number | boolean) => {
+  if (checked) {
+    if (!selectedAudioIds.value.includes(audioId)) {
+      selectedAudioIds.value = [...selectedAudioIds.value, audioId]
+    }
+    return
+  }
+
+  selectedAudioIds.value = selectedAudioIds.value.filter((id) => id !== audioId)
+}
+
+const toggleSelectAll = (checked: string | number | boolean) => {
+  selectedAudioIds.value = checked ? records.value.map((record) => record.audio_id) : []
+}
+
+const clearSelection = () => {
+  selectedAudioIds.value = []
+}
+
+const allSelected =
+  () => records.value.length > 0 && selectedAudioIds.value.length === records.value.length
+
+const hasPartialSelection =
+  () => selectedAudioIds.value.length > 0 && selectedAudioIds.value.length < records.value.length
 
 const onClose = () => {
   open.value = false
@@ -63,8 +111,7 @@ const getAudioRecords = async () => {
   }
   await getAudioRecordsApi()
     .then((reponse) => {
-      records.value = reponse.records
-      numRecords.value = records.value.length
+      updateRecords(reponse.records || [])
     })
     .catch((error) => {})
 }
@@ -72,10 +119,38 @@ const getAudioRecords = async () => {
 const deleteAudioRecord = async (audio_id: any) => {
   await deleteAudioRecordApi(audio_id)
     .then((response) => {
-      records.value = response.records
-      numRecords.value = records.value.length
+      updateRecords(response.records || [])
     })
     .catch((error) => {})
+}
+
+const deleteSelectedAudioRecords = async () => {
+  if (selectedAudioIds.value.length === 0) {
+    ElMessage({
+      type: 'warning',
+      message: '请先选择需要删除的记录',
+    })
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定删除已选中的 ${selectedAudioIds.value.length} 条历史记录吗？`,
+      '批量删除确认',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+
+    const response = await deleteAudioRecordsApi(selectedAudioIds.value)
+    updateRecords(response.records || [])
+    ElMessage({
+      type: 'success',
+      message: '批量删除成功',
+    })
+  } catch (error) {}
 }
 
 const showDrawer = async () => {
@@ -85,27 +160,85 @@ const showDrawer = async () => {
 
 const downAudio = async (audio_url: string, filename: string) => {
   console.log(`download audio ${filename} from ${audio_url}`)
-  const x = new XMLHttpRequest()
-  x.open('GET', audio_url, true)
-  x.responseType = 'blob'
-  x.onload = (e) => {
-    // 会创建一个 DOMString，其中包含一个表示参数中给出的对象的URL。这个 URL 的生命周期和创建它的窗口中的 document 绑定。这个新的URL 对象表示指定的 File 对象或 Blob 对象。
-    const url = window.URL.createObjectURL(x.response)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
+  return await new Promise<void>((resolve, reject) => {
+    const x = new XMLHttpRequest()
+    x.open('GET', audio_url, true)
+    x.responseType = 'blob'
+    x.onload = () => {
+      const url = window.URL.createObjectURL(x.response)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      window.URL.revokeObjectURL(url)
+      resolve()
+    }
+    x.onerror = () => reject(new Error(`下载失败: ${filename}`))
+    x.send()
+  })
+}
+
+const downloadSelectedAudios = async () => {
+  if (selectedAudioIds.value.length === 0) {
+    ElMessage({
+      type: 'warning',
+      message: '请先选择需要下载的记录',
+    })
+    return
   }
-  x.send()
+
+  const selectedRecords = records.value.filter((record) =>
+    selectedAudioIds.value.includes(record.audio_id),
+  )
+
+  try {
+    for (const record of selectedRecords) {
+      await downAudio(record.audio_path, record.audio_filename)
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+
+    ElMessage({
+      type: 'success',
+      message: `已开始下载 ${selectedRecords.length} 条记录`,
+    })
+  } catch (error) {
+    ElMessage({
+      type: 'error',
+      message: error.message || '批量下载失败',
+    })
+  }
 }
 
 onBeforeMount(async () => {
   isLogin.value = userStore.token !== ''
 })
 
-onUpdated(async () => {
-  isLogin.value = userStore.token !== ''
-})
+watch(
+  () => userStore.token,
+  (token) => {
+    isLogin.value = token !== ''
+    if (!isLogin.value) {
+      updateRecords([])
+      clearSelection()
+    }
+  },
+)
+
+watch(
+  () => open.value,
+  (value) => {
+    if (!value) {
+      clearSelection()
+    }
+  },
+)
+
+const formatTime = (time?: string) => {
+  if (!time) return ''
+  const date = new Date(time)
+  if (Number.isNaN(date.getTime())) return time
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
 </script>
 
 <template>
@@ -141,8 +274,31 @@ onUpdated(async () => {
   >
     <div class="drawer-container" v-if="isLogin">
       <div class="record-container" v-if="numRecords != 0">
+        <div class="batch-toolbar">
+          <el-checkbox
+            :model-value="allSelected()"
+            :indeterminate="hasPartialSelection()"
+            @change="toggleSelectAll"
+          >
+            全选
+          </el-checkbox>
+          <span class="selected-count">已选 {{ selectedAudioIds.length }} 项</span>
+          <div class="batch-actions">
+            <a-button size="small" :disabled="selectedAudioIds.length === 0" @click="downloadSelectedAudios">
+              批量下载
+            </a-button>
+            <a-button
+              size="small"
+              danger
+              :disabled="selectedAudioIds.length === 0"
+              @click="deleteSelectedAudioRecords"
+            >
+              批量删除
+            </a-button>
+          </div>
+        </div>
         <el-scrollbar>
-          <a-card hoverable style="width: 100%" v-for="(record, index) in records">
+          <a-card hoverable class="record-card" style="width: 100%" v-for="(record, index) in records">
             <template #actions>
               <PlayCircleOutlined key="play" @click="clickAudio(record['audio_path'])" />
               <download-outlined
@@ -151,6 +307,15 @@ onUpdated(async () => {
               />
               <delete-outlined key="delete" @click="deleteAudioRecord(record['audio_id'])" />
             </template>
+            <div class="record-card-header">
+              <el-checkbox
+                :model-value="isRecordSelected(record['audio_id'])"
+                @change="(checked) => toggleRecordSelection(record['audio_id'], checked)"
+              >
+                选择
+              </el-checkbox>
+              <span class="record-created-at">{{ formatTime(record['created_at']) }}</span>
+            </div>
             <a-card-meta :title="record['audio_character']" :description="record['audio_text']">
               <template #avatar>
                 <a-avatar :src="record['character_avator_path']" />
@@ -204,5 +369,45 @@ el-header {
   width: 35px;
   height: 35;
   margin-right: 10px;
+}
+
+.drawer-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.selected-count {
+  color: #606266;
+  font-size: 13px;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.record-card {
+  margin-bottom: 12px;
+}
+
+.record-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.record-created-at {
+  color: #909399;
+  font-size: 12px;
 }
 </style>

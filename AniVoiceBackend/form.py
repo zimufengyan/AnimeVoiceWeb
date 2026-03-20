@@ -18,17 +18,17 @@ class LoginResponseForm:
 
 @dataclass
 class TTSReqForm:
-    text: str = None,                   # str.(required) text to be synthesized
-    text_lang: str = "auto",            # str.(required) language of the text to be synthesized
-    ref_audio_path: str = None,         # str.(required) reference audio path
-    prompt_lang: str = None,            # str.(required) language of the prompt text for the reference audio
-    prompt_text: str = "",              # str.(optional) prompt text for the reference audio
-    top_k: int = 5,                     # int. top k sampling
-    top_p: float = 1,                   # float. top p sampling
-    temperature: float = 1,             # float. temperature for sampling
-    sample_steps: int = 16,             # int. When you use v3 model,you can set this sample_steps
-    media_type: str = "wav",            # str. Set the file format for returning audio.
-    streaming_mode: bool = False,       # bool. whether to return a streaming response.
+    text: str = None                    # str.(required) text to be synthesized
+    text_lang: str = "auto"             # str.(required) language of the text to be synthesized
+    ref_audio_path: str = None          # str.(required) reference audio path
+    prompt_lang: str = None             # str.(required) language of the prompt text for the reference audio
+    prompt_text: str = ""               # str.(optional) prompt text for the reference audio
+    top_k: int = 5                      # int. top k sampling
+    top_p: float = 1                    # float. top p sampling
+    temperature: float = 1              # float. temperature for sampling
+    sample_steps: int = 16              # int. When you use v3 model,you can set this sample_steps
+    media_type: str = "wav"             # str. Set the file format for returning audio.
+    streaming_mode: bool = False        # bool. whether to return a streaming response.
     threshold: int = 30                 # int. Text segmentation parameter,the lower value, the faster the streaming inference, but the worse the audio quality.
 
     def to_dict(self):

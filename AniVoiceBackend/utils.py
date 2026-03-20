@@ -5,6 +5,7 @@ import logging
 import trace
 import requests
 import sys
+import httpx
 
 rates = {'S': 0.02, 'A': 0.1, 'B': 0.4, 'C': 0.4, 'D': 0.08}  
 
@@ -124,25 +125,26 @@ async def async_execute_request(
         url: str, param: dict = None, method="GET"
 ):
     """
-    requests 请求处理函数
+    异步 HTTP 请求处理函数
     """
     response = None
     try:
-        if method == 'GET':
-            response = await requests.get(
-                url,
-                params=param
-            )
-        else:
-            response = await requests.post(
-                url, 
-                json=param
-            )
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as http_err:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            if method == 'GET':
+                response = await client.get(
+                    url,
+                    params=param
+                )
+            else:
+                response = await client.post(
+                    url,
+                    json=param
+                )
+            response.raise_for_status()
+    except httpx.HTTPStatusError as http_err:
         logging.error(f"HTTP Error: {http_err}")
         return False, response
-    except requests.exceptions.RequestException as req_err:
+    except httpx.RequestError as req_err:
         logging.error(f"Request Error: {req_err}")
         return False, response
     except Exception as e:

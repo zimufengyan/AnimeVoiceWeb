@@ -1,5 +1,6 @@
 # 基于FastAPI的实现版本
 
+import asyncio
 import glob
 import json
 import logging
@@ -25,13 +26,16 @@ from utils import *
 from setting import Settings
 from form_fast import *
 from form import TTSReqForm
-from database_fast import DatabaseConfig, UserManager, UserItem
+from database_fast import DatabaseConfig, UserManager, UserItem, AudioRecordItem, AudioRecordManager
 from save_big_file import *
 
 
 settings = Settings()
 db_config = DatabaseConfig(settings.SQLALCHEMY_DATABASE_URI)
 user_manager = UserManager(db_config)
+audio_record_manager = AudioRecordManager(db_config)
+
+addr = f'http://{settings.HOST}:{settings.PORT}'
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")    # 挂载静态文件目录
@@ -58,7 +62,12 @@ redis_client = redis.StrictRedis(
 )
 
 # 日志配置
-configure_root_logger(logging.DEBUG)
+configure_root_logger(
+    logging.DEBUG,
+    file_path=os.path.join(settings.BASE_DIR, "backend_runtime.log"),
+    max_size=10,
+    backup_count=3,
+)
 
 # 邮件客户端配置
 fast_mail = None
@@ -86,10 +95,26 @@ def join_url_path(*parts: str) -> str:
     return "/".join(normalized)
 
 
+def resolve_local_backend_path(path_str: str) -> str:
+    normalized = path_str.replace("\\", "/")
+    marker = "/AniVoiceBackend/"
+    if marker in normalized:
+        suffix = normalized.split(marker, 1)[1]
+        return str(Path(settings.BASE_DIR) / Path(suffix.replace("/", os.sep)))
+    return path_str
+
+
 def database_error_response(message: str = "数据库连接失败，请检查 PostgreSQL 配置") -> JSONResponse:
     return JSONResponse(
         content={"code": "-500", "message": message},
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
+
+def model_config_error_response(message: str) -> JSONResponse:
+    return JSONResponse(
+        content={"code": "-3", "message": message},
+        status_code=status.HTTP_400_BAD_REQUEST,
     )
 
 
@@ -165,27 +190,28 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
-# ----------------------- 路由部分 -----------------------
-@app.post("/login", response_model=LoginResponse)
-async def login(request: Request, form: LoginRequest = Body(...)):
-    logging.info('post for login')
+@app.on_event("startup")
+async def startup_event():
+    await db_config.init_models()
 
-    try:
-        user = await user_manager.get_user_by_email(form.email)
-    except Exception as exc:
-        logging.error(f"Database error during login: {exc}", exc_info=True)
-        return database_error_response()
+
+# ----------------------- 路由部分 -----------------------
+@app.post("/login", response_model=LoginRegisterResponse)
+async def login(form: LoginRequest = Body(...)):
+    logging.info('post for login')
+    
+    user = await user_manager.get_user_by_email(form.email)
     
     if not user:
-        return JSONResponse(
-            content={"code": "3", "message": "该用户不存在, 请注册"},
-            status_code=200
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User not found"
         )
     
     if not pwd_context.verify(form.password, user.pwd):
-        return JSONResponse(
-            content={"code": "2", "message": "密码错误"},
-            status_code=200
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="incorrect password"
         )
     
     access_token = create_access_token(
@@ -197,17 +223,16 @@ async def login(request: Request, form: LoginRequest = Body(...)):
         settings.UPLOAD_ICONS_LOCAL_DIR, 
         user.pic
     )
-    base_url = build_base_url(request)
-    avatar_url = f"{base_url}/{avatar_path.replace(os.sep, '/')}"
+    avatar_url = f"{addr}/{avatar_path}"
     
     return {
-        "code": "1",
+        "meta": MetaResponse(code="1", message="登陆成功"),
         "username": user.name,
         "avatar": avatar_url,
         "index": user.index,
         "rate": user.rate,
         "token": access_token,
-        "message": "登陆成功"
+        "user_id": user.id
     }
 
 
@@ -316,7 +341,7 @@ async def get_salt(email: str):
     return {"code": 1, "message": "获取成功", "salt": user.salt}
 
 
-@app.get('/generate_voice')
+@app.post('/generate_voice')
 async def generate_voice(
     request: Request,
     current_user: UserItem = Depends(get_current_user),
@@ -326,34 +351,85 @@ async def generate_voice(
 
     if form.belong not in character_dic:
         logging.warning(f"belong {form.belong} not in character_dic")
-        return JSONResponse(content={"code" : "-1", "messaage": "该IP不存在"}, status_code=201)
+        return JSONResponse(
+            content={"code": "-1", "message": "该IP不存在"},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
     all_characters: dict = character_dic[form.belong]
     if form.character not in all_characters:
         logging.warning(f"character {form.character} not in all_characters")
-        return JSONResponse(content={"code" : "-2", "messaage": "该角色不存在或暂不支持"}, status_code=201)
+        return JSONResponse(
+            content={"code": "-2", "message": "该角色不存在或暂不支持"},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
     
     model_info = all_characters[form.character]
+    required_model_keys = [
+        "gpt_weights_path",
+        "sovits_weights_path",
+        "promot_lang",
+        "prompt_text_path",
+        "ref_audio_path",
+    ]
+    missing_keys = [key for key in required_model_keys if not model_info.get(key)]
+    if missing_keys:
+        logging.warning(
+            "character %s missing model config keys: %s",
+            form.character,
+            ", ".join(missing_keys),
+        )
+        return model_config_error_response(f"角色 {form.character} 缺少模型配置，暂时无法生成语音")
+
     global current_activated_character
 
     if not current_activated_character or form.character != current_activated_character:
         # 角色改变，重新设置模型
         # prepare SOVITS backend
         logging.info(f"set model for character: {form.character}")
-        succ1, _ = await async_execute_request(url=settings.SOVITS_SET_GPT_API, 
-                        param={'weights_path': model_info['gpt_weights_path']})
-        succ2, _ = await async_execute_request(url=settings.SOVITS_SET_VIT_API, 
-                        param={'weights_path': model_info['sovits_weights_path']})
+        try:
+            succ1, _ = await async_execute_request(
+                url=settings.SOVITS_SET_GPT_API,
+                param={'weights_path': model_info['gpt_weights_path']}
+            )
+            succ2, _ = await async_execute_request(
+                url=settings.SOVITS_SET_VIT_API,
+                param={'weights_path': model_info['sovits_weights_path']}
+            )
+        except Exception as exc:
+            logging.error(f"failed to reach GPT-SoVITS weight APIs: {exc}", exc_info=True)
+            return JSONResponse(
+                content={"code": "-1", "message": f"无法连接 GPT-SoVITS 服务: {settings.SOVITS_ADDR}"},
+                status_code=status.HTTP_502_BAD_GATEWAY,
+            )
+
         if not succ1 or not succ2:
-            return JSONResponse(content={"code" : "-1", "messaage": "无法连接GPT-SoVITS"}, status_code=500)
+            return JSONResponse(
+                content={"code": "-1", "message": f"GPT-SoVITS 模型切换失败: {settings.SOVITS_ADDR}"},
+                status_code=status.HTTP_502_BAD_GATEWAY,
+            )
         logging.info(f"successfully set model for character: {form.character}")
         current_activated_character = form.character
 
-    async with aiofiles.open(model_info['prompt_text_path'], 'r', encoding='utf-8') as f:
-        prompt_text = await f.read().replace('/n', '').strip()
+    prompt_text_path = resolve_local_backend_path(model_info['prompt_text_path'])
+    if not os.path.exists(prompt_text_path):
+        logging.error("prompt text file not found: %s", prompt_text_path)
+        return JSONResponse(
+            content={"code": "-4", "message": f"提示词文件不存在: {prompt_text_path}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    async with aiofiles.open(prompt_text_path, 'r', encoding='utf-8') as f:
+        prompt_text = (await f.read()).replace('/n', '').strip()
 
     tts_data = TTSReqForm(
         text = form.text, text_lang=form.lang, ref_audio_path=model_info['ref_audio_path'],
         prompt_lang=model_info['promot_lang'], prompt_text=prompt_text
+    )
+    logging.info(
+        "sending TTS request to %s with ref_audio_path=%s prompt_lang=%s",
+        settings.SOVITS_TTS_API,
+        tts_data.ref_audio_path,
+        tts_data.prompt_lang,
     )
     # succ, response = await async_execute_request(settings.SOVITS_TTS_API, 
     #                                             param=form.to_dict())
@@ -368,15 +444,26 @@ async def generate_voice(
     audio_local_path = join_url_path(settings.GENERATED_AUDIO_LOCAL_DIR, unique_id + '.wav')
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # 发送异步请求到TTS服务
-        response = await client.post(
-            settings.SOVITS_TTS_API,
-            json=tts_data.to_dict(),
-            headers={"Content-Type": "application/json"}
-        )
+        try:
+            # 发送异步请求到TTS服务
+            response = await client.post(
+                settings.SOVITS_TTS_API,
+                json=tts_data.to_dict(),
+                headers={"Content-Type": "application/json"}
+            )
+        except httpx.HTTPError as exc:
+            logging.error(f"failed to reach GPT-SoVITS TTS API: {exc}", exc_info=True)
+            return JSONResponse(
+                content={"code": "-1", "message": f"无法连接 GPT-SoVITS 语音接口: {settings.SOVITS_TTS_API}"},
+                status_code=status.HTTP_502_BAD_GATEWAY,
+            )
 
         if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
+            logging.error("GPT-SoVITS TTS API returned %s: %s", response.status_code, response.text)
+            return JSONResponse(
+                content={"code": "-1", "message": f"GPT-SoVITS 返回异常: {response.status_code}"},
+                status_code=status.HTTP_502_BAD_GATEWAY,
+            )
 
         # 流式模式处理
         if tts_data.streaming_mode:
@@ -398,19 +485,71 @@ async def generate_voice(
         # 非流式模式处理
         else:
             audio_data = response.content
-            # 后台保存任务
-            asyncio.create_task(save_wav_bytes(audio_data, audio_path))
+            await save_wav_bytes(audio_data, audio_path)
 
         logging.info(f"successfully write audio into path : {audio_path}")     
         base_url = build_base_url(request)
         local_audio_url = f"{base_url}/{audio_local_path}"
+        character_avatar_url = f"{base_url}/{join_url_path(settings.CHARACTER_AVATOR_LOCAL_DIR, form.belong, f'{form.character}.{settings.CHARACTER_AVATOR_EXT}')}"
+
+        record_created, record_message = await audio_record_manager.create_audio_record(
+            AudioRecordItem(
+                user_id=current_user.id,
+                audio_character=form.character,
+                audio_belong=form.belong,
+                audio_path=local_audio_url,
+                audio_text=form.text,
+                text_lang=form.lang,
+                character_avator_path=character_avatar_url,
+                audio_filename=audio_path.name,
+            )
+        )
+        if not record_created:
+            logging.warning("failed to create audio record: %s", record_message)
+
         return {"code": 1, "audio_url": local_audio_url, "message": "语音生成成功"}
             
 
-@app.get("/get_recent_audio_records")
+@app.get("/get_recent_audio_records", response_model=AudioRecordResponse)
 async def get_recent_audio_records(current_user: dict = Depends(get_current_user)):
-    logging.info(f'current user: {current_user}')
-    return {"code": 1, "message": "获取成功"}
+    logging.info(f'current user: {current_user.name}')
+    succ, records = await audio_record_manager.get_rencent_audio_records_by_user_id(current_user.id, days=settings.AUDIO_RECORD_EXPIRE)
+    if not succ:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="faild to get recent audio records")
+
+    return {"meta": MetaResponse(code="1", message="获取成功"), "records": records}
+
+
+@app.get("/delete_audio_record")
+async def delete_audio_record(current_user: dict = Depends(get_current_user), audio_id: int = Query(...)):
+    logging.info(f'current user: {current_user.name}')
+    succ, message = await audio_record_manager.delete_audio_record_by_id(audio_id)
+    logging.info(message)
+    if not succ:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    
+    # 重新返回最新记录
+    succ, records = await audio_record_manager.get_rencent_audio_records_by_user_id(current_user.id, days=settings.AUDIO_RECORD_EXPIRE)
+    if not succ:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="faild to get recent audio records")
+
+    return {"meta": MetaResponse(code="1", message="删除成功"), "records": records}
+
+
+@app.get('/delete_audio_records')
+async def delete_audio_records(current_user: dict = Depends(get_current_user), audio_ids: List[int] = Query(...)):
+    logging.info(f'current user: {current_user.name}')
+    succ, message = await audio_record_manager.delete_audio_records_by_ids(audio_ids)
+    logging.info(message)
+    if not succ:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    
+    # 重新返回最新记录
+    succ, records = await audio_record_manager.get_rencent_audio_records_by_user_id(current_user.id, days=settings.AUDIO_RECORD_EXPIRE)
+    if not succ:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="faild to get recent audio records")
+
+    return {"meta": MetaResponse(code="1", message="删除成功"), "records": records}
 
 
 @app.get("/download/{filename}")
@@ -461,4 +600,4 @@ async def get_belong_statics(request: Request, belong: Optional[str] = Query(Non
 # -------------------------- 启动部分 -----------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app_fast:app", host="0.0.0.0", port=settings.APP_PORT, reload=True)
+    uvicorn.run("app_fast:app", host="0.0.0.0", port=settings.APP_PORT, reload=False)
