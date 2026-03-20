@@ -87,15 +87,21 @@ else:
 
 
 def build_base_url(request: Request) -> str:
+    """构造当前请求对应的服务根地址。"""
     return str(request.base_url).rstrip("/")
 
 
 def join_url_path(*parts: str) -> str:
+    """将若干 URL 路径片段拼接成标准 Web 路径。"""
     normalized = [part.strip("/\\") for part in parts if part]
     return "/".join(normalized)
 
 
 def resolve_local_backend_path(path_str: str) -> str:
+    """
+    将配置中的后端路径映射到当前本地工作区。
+    :param path_str: 配置文件中记录的绝对路径或远端路径。
+    """
     normalized = path_str.replace("\\", "/")
     marker = "/AniVoiceBackend/"
     if marker in normalized:
@@ -105,6 +111,7 @@ def resolve_local_backend_path(path_str: str) -> str:
 
 
 def database_error_response(message: str = "数据库连接失败，请检查 PostgreSQL 配置") -> JSONResponse:
+    """生成统一的数据库异常响应。"""
     return JSONResponse(
         content={"code": "-500", "message": message},
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -112,6 +119,7 @@ def database_error_response(message: str = "数据库连接失败，请检查 Po
 
 
 def model_config_error_response(message: str) -> JSONResponse:
+    """生成统一的角色模型配置异常响应。"""
     return JSONResponse(
         content={"code": "-3", "message": message},
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -125,6 +133,54 @@ with open(character_info_path, 'r', encoding='utf-8') as f:
     logging.info("successfuy load character_info.json")
 
 current_activated_character = None  # 当前激活的角色
+
+CHARACTER_NAME_ALIASES = {
+    "Kamizato Ayaka": "Ayaka",
+    "Kamisato Ayaka": "Ayaka",
+    "Yae Miko": "YaeMiko",
+}
+
+
+def canonicalize_character_name(name: str, belong: Optional[str] = None) -> str:
+    """
+    将前端展示名或素材文件名归一化为后端模型配置中的标准角色键名。
+    :param name: 前端传入的角色名或素材文件名。
+    :param belong: 角色所属 IP，用于在当前角色集合中做二次匹配。
+    """
+    raw_name = os.path.splitext(name)[0].strip()
+    if not raw_name:
+        return raw_name
+
+    if raw_name in CHARACTER_NAME_ALIASES:
+        return CHARACTER_NAME_ALIASES[raw_name]
+
+    normalized_raw = raw_name.replace(" ", "").lower()
+    if belong in character_dic:
+        for character_name in character_dic[belong].keys():
+            if character_name.replace(" ", "").lower() == normalized_raw:
+                return character_name
+
+    return raw_name
+
+
+def resolve_character_asset_filename(directory: str, belong: str, character_name: str, ext: str) -> str:
+    """
+    按标准角色键名反查素材目录中的真实文件名。
+    :param directory: 素材根目录。
+    :param belong: 角色所属 IP。
+    :param character_name: 标准化后的角色键名。
+    :param ext: 文件扩展名。
+    """
+    character_dir = Path(directory) / belong
+    exact_name = f"{character_name}.{ext}"
+    if (character_dir / exact_name).exists():
+        return exact_name
+
+    for asset_path in sorted(character_dir.glob(f"*.{ext}")):
+        if canonicalize_character_name(asset_path.stem, belong) == character_name:
+            return asset_path.name
+
+    return exact_name
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -348,6 +404,10 @@ async def generate_voice(
     form: TTSRequest = Body(...)
 ):
     logging.info(f'current user: {current_user}')
+    character_name = canonicalize_character_name(form.character, form.belong)
+    if character_name != form.character:
+        logging.info("normalized character name from %s to %s", form.character, character_name)
+        form.character = character_name
 
     if form.belong not in character_dic:
         logging.warning(f"belong {form.belong} not in character_dic")
@@ -490,7 +550,13 @@ async def generate_voice(
         logging.info(f"successfully write audio into path : {audio_path}")     
         base_url = build_base_url(request)
         local_audio_url = f"{base_url}/{audio_local_path}"
-        character_avatar_url = f"{base_url}/{join_url_path(settings.CHARACTER_AVATOR_LOCAL_DIR, form.belong, f'{form.character}.{settings.CHARACTER_AVATOR_EXT}')}"
+        avatar_filename = resolve_character_asset_filename(
+            settings.CHARACTER_AVATOR_DIR,
+            form.belong,
+            form.character,
+            settings.CHARACTER_AVATOR_EXT,
+        )
+        character_avatar_url = f"{base_url}/{join_url_path(settings.CHARACTER_AVATOR_LOCAL_DIR, form.belong, avatar_filename)}"
 
         record_created, record_message = await audio_record_manager.create_audio_record(
             AudioRecordItem(
@@ -590,7 +656,7 @@ async def get_belong_statics(request: Request, belong: Optional[str] = Query(Non
     base_url = build_base_url(request)
     names, stand_urls, avator_urls = [], [], []
     for stand, avator in zip(stands, avators):
-        names.append(os.path.splitext(os.path.basename(stand))[0])
+        names.append(canonicalize_character_name(os.path.splitext(os.path.basename(stand))[0], belong))
         stand_urls.append(f"{base_url}/{join_url_path(settings.STANDS_LOCAL_DIR, belong, os.path.basename(stand))}")
         avator_urls.append(f"{base_url}/{join_url_path(settings.CHARACTER_AVATOR_LOCAL_DIR, belong, os.path.basename(avator))}")
 

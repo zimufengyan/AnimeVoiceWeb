@@ -118,7 +118,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onBeforeMount, watch } from 'vue'
+import { nextTick, ref, onBeforeMount, watch } from 'vue'
 import { getStaticsUrlApi, getGeneratedVoiceApi } from '@/api'
 import { Icon } from '@iconify/vue'
 import { ElMessage } from 'element-plus'
@@ -133,11 +133,28 @@ type CharacterState = {
   index: number
 }
 
+const characterNameAliasMap: Record<string, string> = {
+  'Kamizato Ayaka': 'Ayaka',
+  'Kamisato Ayaka': 'Ayaka',
+  'Yae Miko': 'YaeMiko',
+}
+
+/**
+ * 将前端展示名归一化为后端使用的标准角色键名。
+ * @param name 页面展示、缓存或静态资源中出现的角色名称。
+ */
+const normalizeCharacterName = (name: string) => {
+  const normalizedName = name.trim()
+  if (!normalizedName) return normalizedName
+  return characterNameAliasMap[normalizedName] || normalizedName
+}
+
 const belong = 'GenShin'
 const nameKey = belong + '-Names'
 const avatorKey = belong + '-Avators'
 const standsKey = belong + '-Stands'
 const textareaKey = belong + '-Textarea'
+const selectedCharacterKey = belong + '-SelectedCharacter'
 const apiOrigin = (import.meta.env.VITE_API_ORIGIN as string | undefined)?.replace(/\/$/, '')
 const searchQuery = ref('')
 const chooseCharacter = ref<CharacterState>({ name: '', url: '', avator: '', index: 0 })
@@ -152,11 +169,20 @@ watch(textarea, (value) => {
   localStorage.setItem(textareaKey, value || '')
 })
 
+watch(
+  () => chooseCharacter.value.name,
+  (value) => {
+    if (value) {
+      localStorage.setItem(selectedCharacterKey, value)
+    }
+  },
+)
+
 // 定义滚动条引用
 const scrollbarRef = ref<InstanceType<typeof ElScrollbar> | null>(null)
 
 const getCharacterNamesFromLovalStorage = () => {
-  return localStorage.getItem(nameKey)?.split(',') || []
+  return (localStorage.getItem(nameKey)?.split(',') || []).map(normalizeCharacterName)
 }
 
 const getImageUrlsFromLocalStorage = () => {
@@ -198,30 +224,96 @@ const avatorUrls = ref<string[]>(getCharacterAvatorsFromLocalStorage())
 console.log(names.value)
 // console.log(standUrls.value)
 
-// 从字典中随机获取一个元素
-const getRandomImage = () => {
+/**
+ * 将角色头像列表滚动到指定角色所在位置，并尽量让其显示在中间。
+ * @param index 当前角色在头像列表中的索引。
+ */
+const centerCharacterInScroller = async (index: number) => {
+  await nextTick()
+
+  if (!scrollbarRef.value) return
+
+  const scrollContainer = scrollbarRef.value.$el.querySelector('.el-scrollbar__wrap')
+  if (!scrollContainer) return
+
+  const buttons = scrollContainer.querySelectorAll('.scrollbar-character-item')
+  if (buttons.length <= index) return
+
+  const targetButton = buttons[index] as HTMLElement
+  const containerWidth = scrollContainer.clientWidth
+  const buttonWidth = targetButton.offsetWidth
+  const buttonOffset = targetButton.offsetLeft
+  const scrollPosition = Math.max(buttonOffset - containerWidth / 2 + buttonWidth / 2, 0)
+
+  scrollContainer.scrollTo({
+    left: scrollPosition,
+    behavior: 'smooth',
+  })
+}
+
+/**
+ * 按索引切换当前选中的角色，并同步立绘、头像和滚动条位置。
+ * @param index 角色在 names / standUrls / avatorUrls 中的统一索引。
+ */
+const applySelectedCharacterByIndex = async (index: number) => {
+  if (
+    index < 0 ||
+    index >= names.value.length ||
+    index >= standUrls.value.length ||
+    index >= avatorUrls.value.length
+  ) {
+    return
+  }
+
+  chooseCharacter.value.index = index
+  chooseCharacter.value.name = names.value[index]
+  chooseCharacter.value.url = standUrls.value[index]
+  chooseCharacter.value.avator = avatorUrls.value[index]
+  await centerCharacterInScroller(index)
+}
+
+/**
+ * 从本地缓存中读取上次选中的角色名。
+ * @returns 归一化后的角色键名。
+ */
+const getSavedCharacterName = () => {
+  return normalizeCharacterName(localStorage.getItem(selectedCharacterKey) || '')
+}
+
+/**
+ * 恢复刷新前最后一次选中的角色；如果没有缓存，则回退为随机角色。
+ */
+const restoreSelectedCharacter = async () => {
   if (names.value.length === 0 || standUrls.value.length === 0 || avatorUrls.value.length === 0) {
     return
   }
+
+  const savedCharacterName = getSavedCharacterName()
+  const savedCharacterIndex = names.value.findIndex((name) => name === savedCharacterName)
+
+  if (savedCharacterIndex >= 0) {
+    await applySelectedCharacterByIndex(savedCharacterIndex)
+    return
+  }
+
   const randomKey = Math.floor(Math.random() * names.value.length)
-  const randomUrl = standUrls.value[randomKey] // 通过图片名称获取对应的立绘 URL
-  const randomAvator = avatorUrls.value[randomKey] // 通过图片名称获取对应的头像 URL
-  chooseCharacter.value.index = randomKey
-  chooseCharacter.value.name = names.value[randomKey]
-  chooseCharacter.value.url = randomUrl
-  chooseCharacter.value.avator = randomAvator
+  await applySelectedCharacterByIndex(randomKey)
 }
 
 // 从后端请求图片 URLs 并存储到 localStorage
+/**
+ * 拉取当前 IP 的静态资源列表，并更新本地缓存。
+ */
 const fetchImageUrls = async () => {
   await getStaticsUrlApi(belong)
     .then((response: BelongStaticsResponseData) => {
       if (response.names) {
+        const normalizedNames = response.names.map(normalizeCharacterName)
         // 存储获取到的图片 URLs 到 localStorage
-        localStorage.setItem(nameKey, response.names.join(','))
+        localStorage.setItem(nameKey, normalizedNames.join(','))
         localStorage.setItem(standsKey, response.stands.join(','))
         localStorage.setItem(avatorKey, response.avators.join(','))
-        names.value = response.names
+        names.value = normalizedNames
         standUrls.value = response.stands
         avatorUrls.value = response.avators
         console.log(names.value)
@@ -233,6 +325,9 @@ const fetchImageUrls = async () => {
     })
 }
 
+/**
+ * 向后端提交文本和角色信息，请求生成语音。
+ */
 const handleGenerateBtn = async () => {
   if (!textarea || textarea.value == '') {
     ElMessage({
@@ -272,6 +367,9 @@ const handleGenerateBtn = async () => {
   }
 }
 
+/**
+ * 读取当前音频资源的文件名，用于下载时优先沿用服务端命名。
+ */
 const getServerFileName = async () => {
   try {
     const response = await fetch(audio_url.value, { method: 'HEAD' })
@@ -285,6 +383,9 @@ const getServerFileName = async () => {
   }
 }
 
+/**
+ * 下载当前已经生成完成的语音文件。
+ */
 const handleDownloadBtn = async () => {
   if (!isDownloadAvilabel.value || !audio_url.value) {
     ElMessage({
@@ -321,64 +422,39 @@ const handleDownloadBtn = async () => {
   }, 1000)
 }
 
+/**
+ * 切换到左侧相邻角色。
+ */
 const handleLeftClick = () => {
   console.log('Left button clicked')
   // 左侧按钮点击逻辑
   const currIndex = chooseCharacter.value.index
   if (currIndex > 0 && currIndex - 1 < avatorUrls.value.length) {
-    chooseCharacter.value.index = currIndex - 1
-    chooseCharacter.value.avator = avatorUrls.value[currIndex - 1]
-    chooseCharacter.value.name = names.value[currIndex - 1]
-    chooseCharacter.value.url = standUrls.value[currIndex - 1]
+    applySelectedCharacterByIndex(currIndex - 1)
   }
 }
 
+/**
+ * 切换到右侧相邻角色。
+ */
 const handleRightClick = () => {
   console.log('Right button clicked')
   // 右侧按钮点击逻辑
   const currIndex = chooseCharacter.value.index
   if (currIndex < names.value.length - 1 && currIndex + 1 < avatorUrls.value.length) {
-    const nextIndex = currIndex + 1
-    chooseCharacter.value.index = nextIndex
-    chooseCharacter.value.avator = avatorUrls.value[nextIndex]
-    chooseCharacter.value.name = names.value[nextIndex]
-    chooseCharacter.value.url = standUrls.value[nextIndex]
+    applySelectedCharacterByIndex(currIndex + 1)
   }
 }
 
+/**
+ * 处理头像点击切换逻辑。
+ * @param index 被点击角色在头像列表中的索引。
+ */
 const handleAvatorClick = (index: number) => {
   console.log('Clicked avator index:', index)
   // 更换立绘
   if (index >= 0 && index < names.value.length && index !== chooseCharacter.value.index) {
-    chooseCharacter.value.index = index
-    chooseCharacter.value.name = names.value[index]
-    chooseCharacter.value.url = standUrls.value[index]
-    chooseCharacter.value.avator = avatorUrls.value[index]
-
-    if (!scrollbarRef.value) return
-
-    const scrollContainer = scrollbarRef.value.$el.querySelector('.el-scrollbar__wrap')
-    if (!scrollContainer) return
-
-    const buttons = scrollContainer.querySelectorAll('.scrollbar-character-item')
-
-    if (buttons.length > index) {
-      const targetButton = buttons[index]
-
-      // 计算容器和按钮尺寸
-      const containerWidth = scrollContainer.clientWidth
-      const buttonWidth = targetButton.offsetWidth
-
-      // 计算目标滚动位置
-      const buttonOffset = targetButton.offsetLeft
-      const scrollPosition = buttonOffset - containerWidth / 2 + buttonWidth / 2
-
-      // 平滑滚动到目标位置
-      scrollContainer.scrollTo({
-        left: scrollPosition,
-        behavior: 'smooth',
-      })
-    }
+    applySelectedCharacterByIndex(index)
   }
 }
 
@@ -388,11 +464,16 @@ onBeforeMount(async () => {
     console.log('get stands from backend.')
     await fetchImageUrls() // 等待数据获取完成
   }
-  getRandomImage() // 在确保 standUrls, names, avators 有数据后调用
+  await restoreSelectedCharacter()
   console.log(chooseCharacter.value)
 })
 
 // 搜索建议
+/**
+ * 根据搜索词过滤角色名称，并返回给自动完成组件。
+ * @param queryString 当前输入框中的查询字符串。
+ * @param cb Element Plus 自动完成组件的结果回调。
+ */
 const querySearch = (
   queryString: string,
   cb: (results: Array<{ value: string }>) => void,
@@ -409,6 +490,10 @@ const querySearch = (
 }
 
 // 处理选择搜索结果
+/**
+ * 处理自动完成面板中的搜索结果点击事件。
+ * @param item 当前被选中的搜索项。
+ */
 const handleSelect = (item: { value: string }) => {
   console.log(item)
 }

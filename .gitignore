@@ -7,6 +7,13 @@ AniVoiceBackend/migrations/*
 # 忽略预训练模型目录（保留空目录结构）
 AniVoiceBackend/pretrained_model
 
+# 生成音频与本地参考音频
+AniVoiceBackend/static/gen_audios/*.wav
+AniVoiceBackend/static/ref_audios/**/*.wav
+AniVoiceBackend/static/ref_audios/**/*.txt
+!AniVoiceBackend/static/ref_audios/GenShin/furina-ref.wav
+!AniVoiceBackend/static/ref_audios/GenShin/furina-ref.txt
+
 # 通用开发环境排除项
 *.log
 *.pyc
