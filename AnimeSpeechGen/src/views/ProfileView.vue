@@ -16,8 +16,8 @@
       <div v-if="isLoggedIn" class="profile-card">
         <div class="profile-summary">
           <div class="avatar-panel">
-            <button type="button" class="avatar-trigger" @click="triggerAvatarUpload">
-              <el-avatar :size="132" :src="avatarPreview" class="profile-avatar">
+            <button type="button" :class="['avatar-trigger', avatarRateClass]" @click="triggerAvatarUpload">
+              <el-avatar :size="132" :src="avatarPreview" :class="['profile-avatar', avatarRateClass]">
                 {{ userInitial }}
               </el-avatar>
               <span class="avatar-hover-mask">更换头像</span>
@@ -227,7 +227,7 @@
       <div class="profile-editor">
         <div class="editor-preview">
           <div class="preview-banner" :style="{ backgroundImage: `url(${editForm.profileBanner || bannerPreview})` }">
-            <el-avatar :src="editForm.avatar || avatarPreview" :size="96" class="preview-avatar">
+            <el-avatar :src="editForm.avatar || avatarPreview" :size="96" :class="['preview-avatar', avatarRateClass]">
               {{ userInitial }}
             </el-avatar>
           </div>
@@ -480,6 +480,7 @@ const rateTagType = computed(() => {
   if (rate === 'C') return 'info'
   return 'danger'
 })
+const avatarRateClass = computed(() => getAvatarRateClass(displayRate.value))
 const currentPageSizeOptions = computed(() =>
   historyLayout.value === 'card' ? CARD_PAGE_SIZES : LIST_PAGE_SIZES,
 )
@@ -1339,6 +1340,20 @@ const formatTime = (time?: string) => {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
+/**
+ * 将评级映射为头像外框主题类，供个人中心头像装饰复用。
+ * @param rate 当前用户评级。
+ * @returns 对应的头像主题类名。
+ */
+const getAvatarRateClass = (rate?: string) => {
+  const normalizedRate = (rate || '').trim().toUpperCase()
+  if (normalizedRate === 'S') return 'avatar-rate-s'
+  if (normalizedRate === 'A') return 'avatar-rate-a'
+  if (normalizedRate === 'B') return 'avatar-rate-b'
+  if (normalizedRate === 'C') return 'avatar-rate-c'
+  return 'avatar-rate-d'
+}
+
 onBeforeMount(async () => {
   await loadProfile()
   await getAudioRecords()
@@ -1491,11 +1506,76 @@ watch(filteredRecords, (nextRecords) => {
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
+  --avatar-frame-start: #7c8aa5;
+  --avatar-frame-end: #53627c;
+  --avatar-frame-glow: rgba(83, 98, 124, 0.28);
+  --avatar-frame-highlight: rgba(255, 255, 255, 0.72);
+}
+
+.avatar-trigger::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  z-index: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 28% 24%, var(--avatar-frame-highlight), transparent 34%),
+    linear-gradient(145deg, var(--avatar-frame-start), var(--avatar-frame-end));
+  box-shadow:
+    0 18px 34px var(--avatar-frame-glow),
+    0 0 0 1px rgba(255, 255, 255, 0.42);
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
 }
 
 .profile-avatar {
+  position: relative;
+  z-index: 1;
   border: 5px solid rgba(255, 255, 255, 0.95);
-  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+  box-shadow:
+    0 16px 30px rgba(15, 23, 42, 0.18),
+    0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.avatar-trigger:hover::before {
+  transform: scale(1.02);
+  box-shadow:
+    0 22px 38px var(--avatar-frame-glow),
+    0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.avatar-rate-s {
+  --avatar-frame-start: #fff3a3;
+  --avatar-frame-end: #d99416;
+  --avatar-frame-glow: rgba(232, 178, 43, 0.38);
+  --avatar-frame-highlight: rgba(255, 251, 230, 0.95);
+}
+
+.avatar-rate-a {
+  --avatar-frame-start: #d9d0ff;
+  --avatar-frame-end: #6f63ff;
+  --avatar-frame-glow: rgba(111, 99, 255, 0.28);
+  --avatar-frame-highlight: rgba(243, 239, 255, 0.88);
+}
+
+.avatar-rate-b {
+  --avatar-frame-start: #cde7ff;
+  --avatar-frame-end: #2f7ff5;
+  --avatar-frame-glow: rgba(47, 127, 245, 0.26);
+  --avatar-frame-highlight: rgba(236, 246, 255, 0.86);
+}
+
+.avatar-rate-c {
+  --avatar-frame-start: #c8f2df;
+  --avatar-frame-end: #1f9b68;
+  --avatar-frame-glow: rgba(31, 155, 104, 0.24);
+  --avatar-frame-highlight: rgba(239, 255, 248, 0.84);
+}
+
+.avatar-rate-d {
+  --avatar-frame-start: #ffd8dd;
+  --avatar-frame-end: #d85a67;
+  --avatar-frame-glow: rgba(216, 90, 103, 0.24);
+  --avatar-frame-highlight: rgba(255, 241, 243, 0.86);
 }
 
 .avatar-hover-mask {
@@ -1886,6 +1966,9 @@ watch(filteredRecords, (nextRecords) => {
   position: relative;
   z-index: 1;
   border: 4px solid rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 14px 28px var(--avatar-frame-glow, rgba(15, 23, 42, 0.14)),
+    0 0 0 4px var(--avatar-frame-start, #7c8aa5);
 }
 
 .editor-form-row {
