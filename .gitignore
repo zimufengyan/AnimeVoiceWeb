@@ -32,3 +32,8 @@ AniVoiceBackend/.env
 # 临时文件
 *.tmp
 *.bak
+
+# 本地调试与运行期资源
+.codex/
+AniVoiceBackend/character_info.json
+AniVoiceBackend/static/upload/
