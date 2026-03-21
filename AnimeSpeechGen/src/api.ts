@@ -6,8 +6,12 @@ import type {
   GetSaltResponseData,
   LoginForm,
   LoginResponseData,
+  ProfileResponseData,
+  ProfileUploadResponseData,
   RegisterForm,
   RegisterResponseData,
+  UpdateProfilePayload,
+  UserProfile,
 } from './util/types'
 
 const API_PORT = import.meta.env.VITE_API_PORT || '25683'
@@ -26,6 +30,9 @@ const API = {
   GET_AUDIO_RECORDS: `${BASEURL}/get_recent_audio_records`,
   DELETE_AURIO_RECORD: `${BASEURL}/delete_audio_record`,
   DELETE_AURIO_RECORDS: `${BASEURL}/delete_audio_records`,
+  PROFILE: `${BASEURL}/profile`,
+  PROFILE_AVATAR: `${BASEURL}/profile/avatar`,
+  PROFILE_BANNER: `${BASEURL}/profile/banner`,
   HITOKITO_API: 'https://v1.hitokoto.cn',
 } as const
 
@@ -38,25 +45,63 @@ type LoginApiRaw = {
   meta: LoginResponseData['meta']
   username: string
   avatar: string
-  index: string
+  uid: number | string
   rate: string
   token: string
-  user_id: string
 }
 
 type RegisterApiRaw = {
   meta: RegisterResponseData['meta']
   username: string
   avatar: string
-  index: string
+  uid: number | string
   rate: string
-  user_id: string
 }
 
 type ExternalHitokotoRaw = {
   hitokoto: string
   from_who?: string | null
   from?: string | null
+}
+
+type ProfileApiRaw = {
+  username?: string
+  avatar?: string
+  uid?: number | string
+  rate?: string
+  signature?: string
+  profile_banner?: string
+  birthday?: string
+  gender?: UserProfile['gender']
+}
+
+type ProfileEnvelopeRaw = {
+  meta?: ProfileResponseData['meta']
+  profile: ProfileApiRaw
+}
+
+type ProfileUploadRaw = {
+  meta?: ProfileUploadResponseData['meta']
+  profile?: ProfileApiRaw
+  asset_url?: string
+}
+
+/**
+ * 将后端返回的 profile 原始结构映射为前端统一使用的资料对象。
+ * @param profileApiRaw 后端 profile 字段原始值。
+ * @returns 适用于前端的用户资料对象。
+ */
+const mapProfile = (profileApiRaw: ProfileApiRaw): UserProfile => {
+  return {
+    username: profileApiRaw.username || '',
+    avatar: profileApiRaw.avatar || '',
+    uid: profileApiRaw.uid === undefined || profileApiRaw.uid === null ? '' : `${profileApiRaw.uid}`,
+    rate: profileApiRaw.rate || '',
+    signature: profileApiRaw.signature || '',
+    profileBanner: profileApiRaw.profile_banner || '',
+    birthday: profileApiRaw.birthday || '',
+    gender: profileApiRaw.gender || '',
+  }
 }
 
 export const loginApi = async (data: LoginForm): Promise<LoginResponseData> => {
@@ -70,10 +115,9 @@ export const loginApi = async (data: LoginForm): Promise<LoginResponseData> => {
     meta: response.meta,
     username: response.username,
     avatar: response.avatar,
-    index: response.index,
+    uid: `${response.uid}`,
     rate: response.rate,
     token: response.token,
-    id: response.user_id,
   }
 }
 
@@ -112,10 +156,9 @@ export const registerApi = async (data: RegisterForm): Promise<RegisterResponseD
   return {
     username: response.username,
     avatar: response.avatar,
-    index: response.index,
+    uid: `${response.uid}`,
     rate: response.rate,
     meta: response.meta,
-    id: response.user_id,
   }
 }
 
@@ -193,4 +236,91 @@ export const deleteAudioRecordsApi = async (audio_ids: number[]): Promise<AudioR
     url: `${API.DELETE_AURIO_RECORDS}?${params.toString()}`,
     method: 'GET',
   })
+}
+
+/**
+ * 获取当前登录用户的个人资料。
+ */
+export const getProfileApi = async (): Promise<ProfileResponseData> => {
+  const response = await request<unknown, ProfileEnvelopeRaw>({
+    url: API.PROFILE,
+    method: 'GET',
+  })
+
+  return {
+    meta: response.meta,
+    profile: mapProfile(response.profile || {}),
+  }
+}
+
+/**
+ * 更新当前登录用户的个人资料。
+ * @param data 个人资料更新负载。
+ */
+export const updateProfileApi = async (data: UpdateProfilePayload): Promise<ProfileResponseData> => {
+  const response = await request<unknown, ProfileEnvelopeRaw>({
+    url: API.PROFILE,
+    method: 'PUT',
+    data: {
+      username: data.username,
+      avatar: data.avatar,
+      signature: data.signature,
+      profile_banner: data.profileBanner,
+      birthday: data.birthday,
+      gender: data.gender,
+    },
+  })
+
+  return {
+    meta: response.meta,
+    profile: mapProfile(response.profile || {}),
+  }
+}
+
+/**
+ * 上传个人头像文件。
+ * @param file 需要上传的头像文件。
+ */
+export const uploadProfileAvatarApi = async (file: File): Promise<ProfileUploadResponseData> => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await request<unknown, ProfileUploadRaw>({
+    url: API.PROFILE_AVATAR,
+    method: 'POST',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+
+  return {
+    meta: response.meta,
+    profile: response.profile ? mapProfile(response.profile) : undefined,
+    assetUrl: response.asset_url,
+  }
+}
+
+/**
+ * 上传个人横幅文件。
+ * @param file 需要上传的横幅文件。
+ */
+export const uploadProfileBannerApi = async (file: File): Promise<ProfileUploadResponseData> => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await request<unknown, ProfileUploadRaw>({
+    url: API.PROFILE_BANNER,
+    method: 'POST',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+
+  return {
+    meta: response.meta,
+    profile: response.profile ? mapProfile(response.profile) : undefined,
+    assetUrl: response.asset_url,
+  }
 }

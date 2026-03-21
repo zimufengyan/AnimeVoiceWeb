@@ -38,14 +38,35 @@ export type AudioRecord = {
   audio_filename: string
 }
 
+export type UserGender = '' | 'male' | 'female' | 'private'
+
+export type UserProfile = {
+  username: string
+  avatar: string
+  uid: string
+  rate: string
+  signature: string
+  profileBanner: string
+  birthday: string
+  gender: UserGender
+}
+
+export type UpdateProfilePayload = {
+  username?: string
+  avatar?: string
+  signature?: string
+  profileBanner?: string
+  birthday?: string
+  gender?: UserGender
+}
+
 export type LoginResponseData = {
   meta: MetaForm
   username: string
   avatar: string
-  index: string
+  uid: string
   rate: string
   token: string
-  id: string
 }
 
 export type GetSaltResponseData = {
@@ -58,10 +79,9 @@ export type GetSaltResponseData = {
 export type RegisterResponseData = {
   username: string
   avatar: string
-  index: string
+  uid: string
   rate: string
   meta: MetaForm
-  id: string
 }
 
 export type GenerateVoiceResponseData = {
@@ -80,4 +100,15 @@ export type BelongStaticsResponseData = {
 export type AudioRecordsResponseData = {
   meta?: MetaForm
   records: AudioRecord[]
+}
+
+export type ProfileResponseData = {
+  meta?: MetaForm
+  profile: UserProfile
+}
+
+export type ProfileUploadResponseData = {
+  meta?: MetaForm
+  profile?: UserProfile
+  assetUrl?: string
 }

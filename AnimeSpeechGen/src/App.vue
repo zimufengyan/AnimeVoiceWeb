@@ -5,9 +5,10 @@ import {
   PlayCircleOutlined,
   DownloadOutlined,
   DeleteOutlined,
+  VerticalAlignTopOutlined,
 } from '@ant-design/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { onBeforeMount, ref, watch } from 'vue'
+import { onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/counter'
 import { getAudioRecordsApi, deleteAudioRecordApi, deleteAudioRecordsApi } from './api'
 import type { AudioRecord } from '@/util/types'
@@ -52,6 +53,8 @@ const isLogin = ref<boolean>(userStore.token !== '')
 const records = ref<AudioRecord[]>([])
 const numRecords = ref(0)
 const selectedAudioIds = ref<number[]>([])
+const showBackTop = ref(false)
+let scrollTarget: HTMLElement | null = null
 
 const updateRecords = (nextRecords: AudioRecord[] = []) => {
   records.value = nextRecords
@@ -241,17 +244,49 @@ const getBackTopTarget = () => {
     document.documentElement
   )
 }
+
+/**
+ * 根据主滚动容器的滚动距离决定是否显示返回顶部按钮。
+ */
+const syncBackTopVisibility = () => {
+  const target = getBackTopTarget()
+  showBackTop.value = target.scrollTop > 80
+}
+
+/**
+ * 将主滚动容器平滑滚动到顶部。
+ */
+const scrollToTop = () => {
+  getBackTopTarget().scrollTo({
+    top: 0,
+    behavior: 'smooth',
+  })
+}
+
+onMounted(() => {
+  scrollTarget = getBackTopTarget()
+  scrollTarget.addEventListener('scroll', syncBackTopVisibility, { passive: true })
+  syncBackTopVisibility()
+})
+
+onBeforeUnmount(() => {
+  scrollTarget?.removeEventListener('scroll', syncBackTopVisibility)
+})
 </script>
 
 <template>
   <RouterView />
   <a-float-button-group shape="circle" :style="{ right: '100px' }">
+    <a-float-button v-if="showBackTop" tooltip="返回顶部" @click="scrollToTop">
+      <template #icon>
+        <VerticalAlignTopOutlined />
+      </template>
+    </a-float-button>
     <a-float-button tooltip="语音生成记录" @click="showDrawer">
       <template #icon>
         <CloudDownloadOutlined />
       </template>
     </a-float-button>
-    <a-back-top :visibility-height="80" :target="getBackTopTarget" />
   </a-float-button-group>
 
   <audio

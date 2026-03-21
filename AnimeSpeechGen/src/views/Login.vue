@@ -169,10 +169,9 @@ let loginResponse = reactive<LoginResponseData>({
   },
   username: '',
   avatar: '',
-  index: '',
+  uid: '',
   rate: '',
   token: '',
-  id: '',
 })
 
 const loginFormPhone = reactive<LoginFormPhone>({

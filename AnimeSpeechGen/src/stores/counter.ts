@@ -6,19 +6,23 @@ import type { LoginForm, LoginResponseData } from '@/util/types'
 type StoredUser = {
   username: string
   avatar: string
-  index: string
+  uid: string
   rate: string
   signature?: string
   profileBanner?: string
+  birthday?: string
+  gender?: string
 }
 
 const emptyUser = (): StoredUser => ({
   username: '',
   avatar: '',
-  index: '',
+  uid: '',
   rate: '',
   signature: '',
   profileBanner: '',
+  birthday: '',
+  gender: '',
 })
 
 const parseStoredUser = (): StoredUser => {
@@ -61,7 +65,7 @@ export const useUserStore = defineStore('user', {
       this.user = {
         username: res.username,
         avatar: res.avatar,
-        index: res.index,
+        uid: res.uid,
         rate: res.rate,
       }
       localStorage.setItem('token', res.token)
@@ -86,10 +90,15 @@ export const useUserStore = defineStore('user', {
 
     /**
      * 更新当前登录用户的本地资料信息，并同步写回 localStorage。
-     * @param profilePatch 允许局部更新昵称、头像、评级、签名与横幅图。
+     * @param profilePatch 允许局部更新昵称、头像、评级、签名、横幅图、生日与性别。
      */
     updateProfile(
-      profilePatch: Partial<Pick<StoredUser, 'username' | 'avatar' | 'rate' | 'signature' | 'profileBanner'>>,
+      profilePatch: Partial<
+        Pick<
+          StoredUser,
+          'username' | 'avatar' | 'uid' | 'rate' | 'signature' | 'profileBanner' | 'birthday' | 'gender'
+        >
+      >,
     ) {
       this.user = {
         ...this.user,

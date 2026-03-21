@@ -3,7 +3,7 @@
 from typing import List, Optional
 from pydantic import AliasChoices, BaseModel, Field, EmailStr, field_validator, StringConstraints 
 from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing_extensions import Annotated
 import re
 
@@ -68,10 +68,9 @@ class LoginRegisterResponse(BaseModel):
     meta: MetaResponse
     username: str = ''
     avatar: str = ''      # 头像地址
-    index: Optional[str] = ''      # 用户编号
+    uid: Optional[int | str] = ''      # 用户编号
     rate: Optional[str] = ''       # 评级
     token: Optional[str] = None  
-    user_id: Optional[int]    # 用户ID
 
 
 class GetSaltResponse(BaseModel):
@@ -103,8 +102,12 @@ class UserItem(BaseModel):
     rate: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    index: Optional[str] = None
+    uid: Optional[int] = None
     salt: Optional[str] = None
+    signature: Optional[str] = None
+    profile_banner: Optional[str] = None
+    birthday: Optional[date] = None
+    gender: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -129,6 +132,56 @@ class AudioRecordItem(BaseModel):
 class AudioRecordResponse(BaseModel):
     meta: MetaResponse
     records: Optional[List[AudioRecordItem]] = None
+
+
+class UserProfilePayload(BaseModel):
+    username: str = ""
+    avatar: str = ""
+    uid: int | str | None = None
+    rate: str = ""
+    signature: str = ""
+    profile_banner: str = ""
+    birthday: str = ""
+    gender: str = ""
+
+
+class UserProfileResponse(BaseModel):
+    meta: MetaResponse
+    profile: UserProfilePayload
+
+
+class UpdateProfileRequest(BaseModel):
+    username: Optional[str] = None
+    avatar: Optional[str] = None
+    signature: Optional[str] = None
+    profile_banner: Optional[str] = None
+    birthday: Optional[str] = None
+    gender: Optional[str] = None
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("birthday")
+    @classmethod
+    def validate_birthday(cls, value: Optional[str]) -> Optional[str]:
+        """校验生日字符串是否符合 YYYY-MM-DD 格式。"""
+        if value in (None, ""):
+            return value
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+
+    @field_validator("gender")
+    @classmethod
+    def validate_gender(cls, value: Optional[str]) -> Optional[str]:
+        """限制性别字段只接受前端约定的枚举值。"""
+        if value in (None, "", "male", "female", "private"):
+            return value
+        raise ValueError("gender must be one of '', 'male', 'female', 'private'")
+
+
+class ProfileUploadResponse(BaseModel):
+    meta: MetaResponse
+    profile: Optional[UserProfilePayload] = None
+    asset_url: Optional[str] = None
 
 
 @dataclass

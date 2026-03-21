@@ -64,6 +64,8 @@ class Config:
     DEFAULT_ICON_DIR: str = os.path.join(STATIC_DIR, "default_icon")
     UPLOAD_ICONS_DIR: str = os.path.join(STATIC_DIR, "upload", "icon")
     UPLOAD_ICONS_LOCAL_DIR: str = "static/upload/icon/"
+    PROFILE_BANNERS_DIR: str = os.path.join(STATIC_DIR, "upload", "banner")
+    PROFILE_BANNERS_LOCAL_DIR: str = "static/upload/banner/"
     STANDS_DIR: str = os.path.join(STATIC_DIR, "stands")
     STANDS_LOCAL_DIR: str = "static/stands/"
     STAND_EXT: str = "png"
@@ -142,6 +144,8 @@ class Settings(BaseSettings):
     DEFAULT_ICON_DIR: str = os.path.join(STATIC_DIR, "default_icon")
     UPLOAD_ICONS_DIR: str = os.path.join(STATIC_DIR, "upload", "icon")
     UPLOAD_ICONS_LOCAL_DIR: str = "static/upload/icon/"
+    PROFILE_BANNERS_DIR: str = os.path.join(STATIC_DIR, "upload", "banner")
+    PROFILE_BANNERS_LOCAL_DIR: str = "static/upload/banner/"
     STANDS_DIR: str = os.path.join(STATIC_DIR, "stands")
     STANDS_LOCAL_DIR: str = "static/stands/"
     STAND_EXT: str = "png"

@@ -58,6 +58,14 @@
                 <span class="meta-value meta-value-mono">{{ displayUid }}</span>
               </div>
               <div class="meta-item">
+                <el-icon class="meta-icon"><Calendar /></el-icon>
+                <span class="meta-value">{{ displayBirthday }}</span>
+              </div>
+              <div class="meta-item">
+                <el-icon class="meta-icon"><component :is="displayGenderIcon" /></el-icon>
+                <span class="meta-value">{{ displayGender }}</span>
+              </div>
+              <div class="meta-item">
                 <span class="meta-label">最近更新</span>
                 <span class="meta-value">{{ latestRecordTime }}</span>
               </div>
@@ -226,9 +234,34 @@
         </div>
 
         <el-form label-position="top" class="editor-form">
-          <el-form-item label="昵称">
-            <el-input v-model="editForm.username" maxlength="30" show-word-limit />
-          </el-form-item>
+          <div class="editor-form-row">
+            <el-form-item label="昵称" class="editor-form-item">
+              <el-input v-model="editForm.username" maxlength="30" show-word-limit />
+            </el-form-item>
+            <el-form-item label="评级" class="editor-form-item compact">
+              <el-input :model-value="editForm.rate" disabled />
+            </el-form-item>
+          </div>
+          <div class="editor-form-row">
+            <el-form-item label="性别" class="editor-form-item">
+              <el-select v-model="editForm.gender" placeholder="请选择性别">
+                <el-option label="未设置" value="" />
+                <el-option label="男" value="male" />
+                <el-option label="女" value="female" />
+                <el-option label="保密" value="private" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="生日" class="editor-form-item">
+              <el-date-picker
+                v-model="editForm.birthday"
+                type="date"
+                value-format="YYYY-MM-DD"
+                format="YYYY/MM/DD"
+                placeholder="请选择生日"
+                class="full-width-field"
+              />
+            </el-form-item>
+          </div>
           <el-form-item label="个性签名">
             <el-input
               v-model="editForm.signature"
@@ -238,19 +271,17 @@
               show-word-limit
             />
           </el-form-item>
-          <div class="editor-form-row">
+          <div class="editor-form-row editor-form-row-wide">
             <el-form-item label="头像地址" class="editor-form-item">
               <el-input v-model="editForm.avatar" placeholder="可粘贴图片 URL，或使用上传按钮" />
             </el-form-item>
-            <el-form-item label="评级" class="editor-form-item compact">
-              <el-select v-model="editForm.rate">
-                <el-option v-for="rate in rateOptions" :key="rate" :label="rate" :value="rate" />
-              </el-select>
+            <el-form-item label="横幅地址" class="editor-form-item">
+              <el-input
+                v-model="editForm.profileBanner"
+                placeholder="可粘贴图片 URL，或点击更换横幅上传本地图片"
+              />
             </el-form-item>
           </div>
-          <el-form-item label="横幅地址">
-            <el-input v-model="editForm.profileBanner" placeholder="可粘贴图片 URL，或点击更换横幅上传本地图片" />
-          </el-form-item>
         </el-form>
       </div>
 
@@ -261,21 +292,87 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="cropperVisible"
+      :title="cropperDialogTitle"
+      width="760px"
+      class="profile-cropper-dialog"
+      @opened="initializeCropper"
+      @closed="resetCropperState"
+    >
+      <div class="cropper-dialog-body">
+        <div :class="['cropper-stage', `cropper-stage-${cropTarget}`]">
+          <img ref="cropperImageRef" :src="cropperSource" class="cropper-image" alt="待裁剪图片" />
+        </div>
+        <div class="cropper-panel">
+          <h3 class="cropper-panel-title">{{ cropperDialogTitle }}</h3>
+          <p class="cropper-panel-tip">{{ cropperDialogTip }}</p>
+          <div class="cropper-panel-meta">
+            <span>当前比例</span>
+            <strong>{{ cropperAspectLabel }}</strong>
+          </div>
+          <div class="cropper-slider-group">
+            <div class="cropper-slider-head">
+              <span>缩放</span>
+              <strong>{{ cropperZoomPercent }}%</strong>
+            </div>
+            <el-slider
+              v-model="cropperZoomPercent"
+              :min="100"
+              :max="220"
+              :step="1"
+              @input="handleCropperZoomChange"
+            />
+          </div>
+          <div class="cropper-preview-group">
+            <span class="cropper-preview-label">实时预览</span>
+            <div
+              v-if="cropTarget === 'avatar'"
+              class="cropper-preview-avatar"
+              :style="{ backgroundImage: cropperPreviewUrl ? `url(${cropperPreviewUrl})` : 'none' }"
+            ></div>
+            <div
+              v-else
+              class="cropper-preview-banner"
+              :style="{ backgroundImage: cropperPreviewUrl ? `url(${cropperPreviewUrl})` : 'none' }"
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="cropperVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmCropper">确认裁剪</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, onBeforeMount, reactive, ref, watch } from 'vue'
+import Cropper from 'cropperjs'
+import 'cropperjs/dist/cropper.css'
+import { computed, nextTick, onBeforeMount, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, Calendar, Female, Male, User } from '@element-plus/icons-vue'
 import { DeleteOutlined } from '@ant-design/icons-vue'
-import { deleteAudioRecordApi, deleteAudioRecordsApi, getAudioRecordsApi } from '@/api'
+import {
+  deleteAudioRecordApi,
+  deleteAudioRecordsApi,
+  getAudioRecordsApi,
+  getProfileApi,
+  updateProfileApi,
+  uploadProfileAvatarApi,
+  uploadProfileBannerApi,
+} from '@/api'
 import { useUserStore } from '@/stores/counter'
 import DefaultBanner from '@/assets/slideImgs/slideImg3.png'
 import DefaultAvatar from '@/assets/zmfy.jpg'
-import type { AudioRecord } from '@/util/types'
+import type { AudioRecord, UpdateProfilePayload, UserGender, UserProfile } from '@/util/types'
 
 type EditableProfileForm = {
   username: string
@@ -283,13 +380,18 @@ type EditableProfileForm = {
   rate: string
   signature: string
   profileBanner: string
+  birthday: string
+  gender: string
 }
 
 type HistoryLayout = 'card' | 'list'
+type CropTarget = 'avatar' | 'banner'
 
 const HISTORY_LAYOUT_KEY = 'profile-history-layout'
 const CARD_PAGE_SIZES = [4, 6, 8, 12]
 const LIST_PAGE_SIZES = [5, 8, 10, 15]
+const AVATAR_CROP_RATIO = 1
+const BANNER_CROP_RATIO = 16 / 5
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -308,11 +410,20 @@ const records = ref<AudioRecord[]>([])
 const selectedAudioIds = ref<number[]>([])
 const audioElement = ref<HTMLAudioElement | null>(null)
 const signatureInputRef = ref()
+const cropperImageRef = ref<HTMLImageElement | null>(null)
 const avatarFileInput = ref<HTMLInputElement | null>(null)
 const bannerFileInput = ref<HTMLInputElement | null>(null)
 const rateOptions = ['S', 'A', 'B', 'C', 'D']
 const isEditingSignature = ref(false)
 const draftSignature = ref('')
+const cropperVisible = ref(false)
+const cropTarget = ref<CropTarget>('avatar')
+const cropperSource = ref('')
+const cropperFileName = ref('cropped-image.png')
+const cropperPreviewUrl = ref('')
+const cropperZoomPercent = ref(100)
+const cropperBaseRatio = ref(1)
+let cropperInstance: Cropper | null = null
 
 const editForm = reactive<EditableProfileForm>({
   username: '',
@@ -320,6 +431,8 @@ const editForm = reactive<EditableProfileForm>({
   rate: 'A',
   signature: '',
   profileBanner: '',
+  birthday: '',
+  gender: '',
 })
 
 const isLoggedIn = computed(() => token.value !== '')
@@ -328,8 +441,26 @@ const displayRate = computed(() => user.value.rate || 'A')
 const displaySignature = computed(
   () => user.value.signature || '还没有留下个性签名，先写一句介绍自己吧。',
 )
-const displayIndex = computed(() => user.value.index || '--')
-const displayUid = computed(() => formatDisplayUid(displayIndex.value))
+const displayUidValue = computed(() => `${user.value.uid || ''}`)
+const displayUid = computed(() => formatDisplayUid(displayUidValue.value))
+const displayBirthday = computed(() => formatBirthday(user.value.birthday))
+const displayGender = computed(() => formatGenderLabel(user.value.gender))
+const cropperDialogTitle = computed(() =>
+  cropTarget.value === 'avatar' ? '裁剪头像' : '裁剪横幅',
+)
+const cropperDialogTip = computed(() =>
+  cropTarget.value === 'avatar'
+    ? '保持固定头像框，直接拖动图片调整显示区域，滚轮可轻微缩放。'
+    : '保持固定横幅框，直接拖动图片调整显示区域，滚轮可轻微缩放。',
+)
+const cropperAspectLabel = computed(() =>
+  cropTarget.value === 'avatar' ? '1 : 1' : '16 : 5',
+)
+const displayGenderIcon = computed(() => {
+  if (user.value.gender === 'male') return Male
+  if (user.value.gender === 'female') return Female
+  return User
+})
 const avatarPreview = computed(() => user.value.avatar || DefaultAvatar)
 const bannerPreview = computed(() => user.value.profileBanner || DefaultBanner)
 const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase())
@@ -352,6 +483,93 @@ const rateTagType = computed(() => {
 const currentPageSizeOptions = computed(() =>
   historyLayout.value === 'card' ? CARD_PAGE_SIZES : LIST_PAGE_SIZES,
 )
+
+/**
+ * 将任意字符串归一化为前端资料里约定的性别枚举。
+ * @param gender 原始性别字段值。
+ * @returns 安全的性别枚举值。
+ */
+const normalizeGender = (gender?: string): UserGender => {
+  if (gender === 'male' || gender === 'female' || gender === 'private') {
+    return gender
+  }
+  return ''
+}
+
+/**
+ * 将当前页面需要维护的资料字段统一写回用户 store。
+ * @param profilePatch 需要覆盖到当前资料里的字段。
+ */
+const applyProfilePatch = (
+  profilePatch: Partial<
+    Pick<
+      UserProfile,
+      'username' | 'avatar' | 'uid' | 'rate' | 'signature' | 'profileBanner' | 'birthday' | 'gender'
+    >
+  >,
+) => {
+  userStore.updateProfile({
+    username: profilePatch.username,
+    avatar: profilePatch.avatar,
+    uid: profilePatch.uid,
+    rate: profilePatch.rate,
+    signature: profilePatch.signature,
+    profileBanner: profilePatch.profileBanner,
+    birthday: profilePatch.birthday,
+    gender: profilePatch.gender,
+  })
+}
+
+/**
+ * 将后端返回的完整资料对象同步到本地 store，确保界面以后端为准。
+ * @param profile 后端返回的用户资料对象。
+ */
+const applyBackendProfile = (profile: UserProfile) => {
+  applyProfilePatch({
+    username: profile.username,
+    avatar: profile.avatar,
+    uid: `${profile.uid || ''}`,
+    rate: profile.rate,
+    signature: profile.signature,
+    profileBanner: profile.profileBanner,
+    birthday: profile.birthday,
+    gender: profile.gender,
+  })
+}
+
+/**
+ * 将编辑弹窗中的资料表单转成后端更新接口需要的负载。
+ * @returns 可直接提交给资料更新接口的对象。
+ */
+const buildProfilePayloadFromForm = (): UpdateProfilePayload => {
+  return {
+    username: editForm.username.trim(),
+    avatar: editForm.avatar.trim(),
+    signature: editForm.signature.trim(),
+    profileBanner: editForm.profileBanner.trim(),
+    birthday: editForm.birthday,
+    gender: normalizeGender(editForm.gender),
+  }
+}
+
+/**
+ * 拉取当前登录用户的个人资料，成功时以后端返回值为准。
+ */
+const loadProfile = async () => {
+  if (!isLoggedIn.value) {
+    syncEditForm()
+    return
+  }
+
+  try {
+    const response = await getProfileApi()
+    applyBackendProfile(response.profile)
+  } catch {
+    // 接口异常时回退到本地缓存，避免个人中心无法使用。
+  } finally {
+    syncEditForm()
+  }
+}
 
 const filteredRecords = computed(() => {
   const searchValue = recordSearchQuery.value.trim().toLowerCase()
@@ -394,6 +612,8 @@ const syncEditForm = () => {
   editForm.rate = user.value.rate || 'A'
   editForm.signature = user.value.signature || ''
   editForm.profileBanner = user.value.profileBanner || ''
+  editForm.birthday = user.value.birthday || ''
+  editForm.gender = user.value.gender || ''
 }
 
 /**
@@ -636,6 +856,194 @@ const readFileAsDataUrl = async (file: File) => {
 }
 
 /**
+ * 销毁当前裁剪实例，避免重复初始化和对象泄漏。
+ */
+const destroyCropper = () => {
+  cropperInstance?.destroy()
+  cropperInstance = null
+}
+
+/**
+ * 获取当前真正可用的裁剪实例，兼容 Cropper 在图片元素上挂载的实例引用。
+ * @returns 当前可用的 Cropper 实例。
+ */
+const getActiveCropper = () => {
+  const imageCropper = (cropperImageRef.value as (HTMLImageElement & { cropper?: Cropper }) | null)?.cropper
+  return imageCropper || cropperInstance
+}
+
+/**
+ * 清理裁剪弹窗状态，并释放临时图片 URL。
+ */
+const resetCropperState = () => {
+  destroyCropper()
+  if (cropperSource.value.startsWith('blob:')) {
+    URL.revokeObjectURL(cropperSource.value)
+  }
+  cropperSource.value = ''
+  cropperFileName.value = 'cropped-image.png'
+  cropperPreviewUrl.value = ''
+  cropperZoomPercent.value = 100
+  cropperBaseRatio.value = 1
+}
+
+/**
+ * 根据裁剪目标返回对应的宽高比例。
+ * @param target 当前裁剪目标，头像或横幅。
+ * @returns 裁剪器应使用的宽高比。
+ */
+const getCropAspectRatio = (target: CropTarget) => {
+  return target === 'avatar' ? AVATAR_CROP_RATIO : BANNER_CROP_RATIO
+}
+
+/**
+ * 将用户选中的图片载入裁剪弹窗，等待确认后再上传。
+ * @param file 用户本次选择的原始图片文件。
+ * @param target 当前图片要应用到头像还是横幅。
+ */
+const openCropperForFile = async (file: File, target: CropTarget) => {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('请选择图片文件')
+  }
+
+  resetCropperState()
+  cropTarget.value = target
+  cropperFileName.value = file.name || `cropped-${target}.png`
+  cropperSource.value = URL.createObjectURL(file)
+  cropperVisible.value = true
+}
+
+/**
+ * 将当前裁剪结果同步成实时预览图，方便确认最终展示区域。
+ */
+const syncCropperPreview = () => {
+  const activeCropper = getActiveCropper()
+  if (!activeCropper || typeof activeCropper.getCroppedCanvas !== 'function') return
+
+  const previewWidth = cropTarget.value === 'avatar' ? 160 : 320
+  const previewHeight = cropTarget.value === 'avatar' ? 160 : 100
+  const previewCanvas = activeCropper.getCroppedCanvas({
+    width: previewWidth,
+    height: previewHeight,
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: 'high',
+  })
+  cropperPreviewUrl.value = previewCanvas.toDataURL('image/png')
+}
+
+/**
+ * 根据滑杆值调整当前图片缩放比例，保持“拖图片选显示区域”的交互方式。
+ * @param nextPercent 当前滑杆百分比。
+ */
+const handleCropperZoomChange = (nextPercent: number | number[]) => {
+  const activeCropper = getActiveCropper()
+  if (!activeCropper) return
+
+  const normalizedPercent = Array.isArray(nextPercent) ? nextPercent[0] : nextPercent
+  if (!Number.isFinite(normalizedPercent)) return
+
+  activeCropper.zoomTo(cropperBaseRatio.value * (normalizedPercent / 100))
+  syncCropperPreview()
+}
+
+/**
+ * 在裁剪弹窗打开后初始化 Cropper，接管图片缩放和裁切交互。
+ */
+const initializeCropper = async () => {
+  destroyCropper()
+  await nextTick()
+  if (!cropperImageRef.value || !cropperSource.value) return
+
+  cropperInstance = new Cropper(cropperImageRef.value, {
+    aspectRatio: getCropAspectRatio(cropTarget.value),
+    viewMode: 1,
+    dragMode: 'move',
+    autoCropArea: 1,
+    background: false,
+    guides: false,
+    center: false,
+    highlight: false,
+    movable: true,
+    zoomable: true,
+    cropBoxMovable: false,
+    cropBoxResizable: false,
+    zoomOnWheel: true,
+    wheelZoomRatio: 0.08,
+    responsive: true,
+    scalable: false,
+    toggleDragModeOnDblclick: false,
+    crop: () => {
+      syncCropperPreview()
+    },
+    ready: () => {
+      const activeCropper = getActiveCropper()
+      if (!activeCropper) return
+
+      const containerData = activeCropper.getContainerData()
+      const aspectRatio = getCropAspectRatio(cropTarget.value)
+      const maxWidth = Math.max(containerData.width - 48, 160)
+      const maxHeight = Math.max(containerData.height - 48, 120)
+      let cropBoxWidth = maxWidth
+      let cropBoxHeight = cropBoxWidth / aspectRatio
+
+      if (cropBoxHeight > maxHeight) {
+        cropBoxHeight = maxHeight
+        cropBoxWidth = cropBoxHeight * aspectRatio
+      }
+
+      activeCropper.setCropBoxData({
+        left: (containerData.width - cropBoxWidth) / 2,
+        top: (containerData.height - cropBoxHeight) / 2,
+        width: cropBoxWidth,
+        height: cropBoxHeight,
+      })
+      activeCropper.setDragMode('move')
+
+      const imageData = activeCropper.getImageData()
+      cropperBaseRatio.value =
+        imageData.naturalWidth > 0 ? imageData.width / imageData.naturalWidth : 1
+      cropperZoomPercent.value = 100
+      syncCropperPreview()
+    },
+  })
+}
+
+/**
+ * 将当前裁剪区域导出为新的图片文件，供后续上传或本地预览复用。
+ * @returns 已裁剪好的图片文件对象。
+ */
+const exportCroppedFile = async () => {
+  const activeCropper = getActiveCropper()
+  if (!activeCropper || typeof activeCropper.getCroppedCanvas !== 'function') {
+    throw new Error('裁剪器尚未准备好')
+  }
+
+  const outputWidth = cropTarget.value === 'avatar' ? 512 : 1600
+  const outputHeight = cropTarget.value === 'avatar' ? 512 : 500
+  const fileType = cropTarget.value === 'avatar' ? 'image/png' : 'image/jpeg'
+  const normalizedName = cropperFileName.value.replace(/\.[^.]+$/, '')
+  const outputName =
+    cropTarget.value === 'avatar' ? `${normalizedName}-avatar.png` : `${normalizedName}-banner.jpg`
+
+  const canvas = activeCropper.getCroppedCanvas({
+    width: outputWidth,
+    height: outputHeight,
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: 'high',
+  })
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, fileType, 0.92)
+  })
+
+  if (!blob) {
+    throw new Error('裁剪后的图片导出失败')
+  }
+
+  return new File([blob], outputName, { type: fileType })
+}
+
+/**
  * 触发头像文件选择器，供用户上传本地头像。
  */
 const triggerAvatarUpload = () => {
@@ -650,12 +1058,50 @@ const triggerBannerUpload = () => {
 }
 
 /**
+ * 优先调用后端资料更新接口，失败时回退到本地 store，保证个人中心始终可编辑。
+ * @param payload 需要保存的资料字段。
+ * @param successMessage 成功后的提示文案。
+ */
+const persistProfileWithFallback = async (
+  payload: UpdateProfilePayload,
+  successMessage: string,
+) => {
+  try {
+    const response = await updateProfileApi(payload)
+    applyBackendProfile(response.profile)
+    ElMessage({
+      type: 'success',
+      message: successMessage,
+    })
+  } catch {
+    applyProfilePatch({
+      username: payload.username,
+      avatar: payload.avatar,
+      signature: payload.signature,
+      profileBanner: payload.profileBanner,
+      birthday: payload.birthday,
+      gender: payload.gender,
+    })
+    ElMessage({
+      type: 'warning',
+      message: '后端资料接口暂不可用，已先保存到本地',
+    })
+  } finally {
+    syncEditForm()
+  }
+}
+
+/**
  * 保存个人信息区内联编辑的个性签名。
  */
-const saveInlineSignature = () => {
-  userStore.updateProfile({
-    signature: draftSignature.value.trim(),
-  })
+const saveInlineSignature = async () => {
+  if (!isEditingSignature.value) return
+  await persistProfileWithFallback(
+    {
+      signature: draftSignature.value.trim(),
+    },
+    '个性签名已更新',
+  )
   isEditingSignature.value = false
 }
 
@@ -663,23 +1109,32 @@ const saveInlineSignature = () => {
  * 取消个性签名内联编辑，恢复到保存前的展示状态。
  */
 const cancelInlineSignature = () => {
+  if (!isEditingSignature.value) return
   draftSignature.value = user.value.signature || ''
   isEditingSignature.value = false
 }
 
 /**
- * 处理头像文件上传，并同步写入编辑表单。
- * @param event input[type=file] 的 change 事件。
+ * 将裁剪后的头像文件同步到后端，失败时回退到本地 Data URL 预览。
+ * @param file 已裁剪好的头像图片文件。
  */
-const handleAvatarFileChange = async (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-
+const applyAvatarFile = async (file: File) => {
   try {
-    const imageDataUrl = await readFileAsDataUrl(file)
-    editForm.avatar = imageDataUrl
-    userStore.updateProfile({ avatar: imageDataUrl })
+    try {
+      const response = await uploadProfileAvatarApi(file)
+      const nextAvatar =
+        response.assetUrl || response.profile?.avatar || editForm.avatar || user.value.avatar || ''
+      editForm.avatar = nextAvatar
+      if (response.profile) {
+        applyBackendProfile(response.profile)
+      } else {
+        applyProfilePatch({ avatar: nextAvatar })
+      }
+    } catch {
+      const imageDataUrl = await readFileAsDataUrl(file)
+      editForm.avatar = imageDataUrl
+      applyProfilePatch({ avatar: imageDataUrl })
+    }
     ElMessage({
       type: 'success',
       message: '头像已更新',
@@ -689,24 +1144,36 @@ const handleAvatarFileChange = async (event: Event) => {
       type: 'error',
       message: error instanceof Error ? error.message : '头像上传失败',
     })
-  } finally {
-    input.value = ''
   }
 }
 
 /**
- * 处理横幅文件上传，并同步写入编辑表单。
- * @param event input[type=file] 的 change 事件。
+ * 将裁剪后的横幅文件同步到后端，失败时回退到本地 Data URL 预览。
+ * @param file 已裁剪好的横幅图片文件。
  */
-const handleBannerFileChange = async (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-
+const applyBannerFile = async (file: File) => {
   try {
-    const imageDataUrl = await readFileAsDataUrl(file)
-    editForm.profileBanner = imageDataUrl
-    userStore.updateProfile({ profileBanner: imageDataUrl })
+    try {
+      const response = await uploadProfileBannerApi(file)
+      const nextBanner =
+        response.assetUrl ||
+        response.profile?.profileBanner ||
+        editForm.profileBanner ||
+        user.value.profileBanner ||
+        ''
+      editForm.profileBanner = nextBanner
+      if (response.profile) {
+        applyBackendProfile(response.profile)
+      } else {
+        applyProfilePatch({
+          profileBanner: nextBanner,
+        })
+      }
+    } catch {
+      const imageDataUrl = await readFileAsDataUrl(file)
+      editForm.profileBanner = imageDataUrl
+      applyProfilePatch({ profileBanner: imageDataUrl })
+    }
     ElMessage({
       type: 'success',
       message: '横幅已更新',
@@ -716,15 +1183,75 @@ const handleBannerFileChange = async (event: Event) => {
       type: 'error',
       message: error instanceof Error ? error.message : '横幅上传失败',
     })
+  }
+}
+
+/**
+ * 处理头像文件选择，先打开裁剪弹窗，再决定最终上传内容。
+ * @param event input[type=file] 的 change 事件。
+ */
+const handleAvatarFileChange = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  try {
+    await openCropperForFile(file, 'avatar')
+  } catch (error: unknown) {
+    ElMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : '头像读取失败',
+    })
   } finally {
     input.value = ''
   }
 }
 
 /**
- * 保存资料编辑弹窗中的修改，并写入用户本地资料。
+ * 处理横幅文件选择，先打开裁剪弹窗，再决定最终上传内容。
+ * @param event input[type=file] 的 change 事件。
  */
-const saveProfile = () => {
+const handleBannerFileChange = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  try {
+    await openCropperForFile(file, 'banner')
+  } catch (error: unknown) {
+    ElMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : '横幅读取失败',
+    })
+  } finally {
+    input.value = ''
+  }
+}
+
+/**
+ * 确认当前裁剪结果，并按照目标类型更新头像或横幅。
+ */
+const confirmCropper = async () => {
+  try {
+    const croppedFile = await exportCroppedFile()
+    if (cropTarget.value === 'avatar') {
+      await applyAvatarFile(croppedFile)
+    } else {
+      await applyBannerFile(croppedFile)
+    }
+    cropperVisible.value = false
+  } catch (error: unknown) {
+    ElMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : '图片裁剪失败',
+    })
+  }
+}
+
+/**
+ * 保存资料编辑弹窗中的修改，优先同步到后端，再回写到本地 store。
+ */
+const saveProfile = async () => {
   if (!editForm.username.trim()) {
     ElMessage({
       type: 'warning',
@@ -733,19 +1260,8 @@ const saveProfile = () => {
     return
   }
 
-  userStore.updateProfile({
-    username: editForm.username.trim(),
-    avatar: editForm.avatar.trim(),
-    rate: editForm.rate,
-    signature: editForm.signature.trim(),
-    profileBanner: editForm.profileBanner.trim(),
-  })
-
+  await persistProfileWithFallback(buildProfilePayloadFromForm(), '个人资料已更新')
   editorVisible.value = false
-  ElMessage({
-    type: 'success',
-    message: '个人资料已更新',
-  })
 }
 
 /**
@@ -777,21 +1293,38 @@ const formatAudioTextPreview = (text?: string) => {
 }
 
 /**
- * 将数据库中的短 UID 映射到九位数展示值，预留后端字段升级前的过渡方案。
- * @param index 当前用户索引字段。
- * @returns 从 100000000 开始的九位展示 UID。
+ * 将后端返回的 UID 规范化为九位展示值。
+ * @param uid 当前用户 UID 字段。
+ * @returns 适合界面展示的九位 UID。
  */
-const formatDisplayUid = (index?: string) => {
-  const numericId = Number(index)
-  if (Number.isNaN(numericId) || numericId <= 0) {
+const formatDisplayUid = (uid?: string) => {
+  const normalizedUid = `${uid || ''}`.trim()
+  if (!normalizedUid) {
     return '100000000'
   }
+  return normalizedUid
+}
 
-  if (numericId >= 100000000) {
-    return `${Math.trunc(numericId)}`
-  }
+/**
+ * 将生日字段格式化为适合个人信息展示的文本。
+ * @param birthday 生日字符串，期望格式为 YYYY-MM-DD。
+ * @returns 格式化后的生日文本。
+ */
+const formatBirthday = (birthday?: string) => {
+  if (!birthday) return '未设置生日'
+  return birthday.replace(/-/g, '/')
+}
 
-  return `${100000000 + Math.max(Math.trunc(numericId) - 1, 0)}`
+/**
+ * 将性别字段转换为界面展示文本。
+ * @param gender 性别字段值。
+ * @returns 用于界面显示的中文文本。
+ */
+const formatGenderLabel = (gender?: string) => {
+  if (gender === 'male') return '男'
+  if (gender === 'female') return '女'
+  if (gender === 'private') return '保密'
+  return '未设置'
 }
 
 /**
@@ -807,8 +1340,12 @@ const formatTime = (time?: string) => {
 }
 
 onBeforeMount(async () => {
-  syncEditForm()
+  await loadProfile()
   await getAudioRecords()
+})
+
+onBeforeUnmount(() => {
+  resetCropperState()
 })
 
 watch(
@@ -817,10 +1354,11 @@ watch(
     if (!nextToken) {
       records.value = []
       selectedAudioIds.value = []
+      syncEditForm()
       return
     }
 
-    syncEditForm()
+    await loadProfile()
     await getAudioRecords()
   },
 )
@@ -895,15 +1433,24 @@ watch(filteredRecords, (nextRecords) => {
   z-index: 1;
   width: 42px;
   height: 42px;
-  border: none;
-  color: #fff;
-  background: rgba(15, 23, 42, 0.42);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  min-width: 42px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 10px 30px rgba(15, 23, 42, 0.16),
+    0 0 0 1px rgba(255, 255, 255, 0.42);
 }
 
 .hero-back-btn:hover {
-  color: #fff;
-  background: rgba(15, 23, 42, 0.58);
+  color: #0f172a;
+  background: #ffffff;
+  border-color: rgba(59, 130, 246, 0.24);
+  box-shadow:
+    0 14px 32px rgba(15, 23, 42, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.56);
 }
 
 .profile-shell {
@@ -1062,6 +1609,11 @@ watch(filteredRecords, (nextRecords) => {
   padding: 8px 12px;
   border-radius: 12px;
   background: rgba(148, 163, 184, 0.08);
+}
+
+.meta-icon {
+  color: #64748b;
+  font-size: 14px;
 }
 
 .meta-label {
@@ -1338,8 +1890,12 @@ watch(filteredRecords, (nextRecords) => {
 
 .editor-form-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.editor-form-row-wide {
+  align-items: start;
 }
 
 .editor-form-item {
@@ -1350,10 +1906,153 @@ watch(filteredRecords, (nextRecords) => {
   width: 100%;
 }
 
+.editor-form-item.compact :deep(.el-input.is-disabled .el-input__wrapper) {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.full-width-field {
+  width: 100%;
+}
+
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.cropper-dialog-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 20px;
+  align-items: start;
+}
+
+.cropper-stage {
+  min-height: 420px;
+  border-radius: 24px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(148, 163, 184, 0.08), rgba(59, 130, 246, 0.08)),
+    #f8fafc;
+}
+
+.cropper-image {
+  display: block;
+  max-width: 100%;
+}
+
+.cropper-stage-avatar :deep(.cropper-view-box),
+.cropper-stage-avatar :deep(.cropper-face) {
+  border-radius: 50%;
+}
+
+.cropper-stage :deep(.cropper-modal) {
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.cropper-stage :deep(.cropper-dashed) {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.cropper-stage :deep(.cropper-line),
+.cropper-stage :deep(.cropper-point) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cropper-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%);
+}
+
+.cropper-panel-title {
+  margin: 0;
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.cropper-panel-tip {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.cropper-panel-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #475569;
+  font-size: 13px;
+}
+
+.cropper-panel-meta strong {
+  color: #1d4ed8;
+  font-size: 15px;
+}
+
+.cropper-slider-group,
+.cropper-preview-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cropper-slider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.cropper-slider-head strong {
+  color: #1d4ed8;
+  font-size: 15px;
+}
+
+.cropper-preview-label {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cropper-preview-avatar,
+.cropper-preview-banner {
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+}
+
+.cropper-preview-avatar {
+  width: 148px;
+  height: 148px;
+  align-self: center;
+  border-radius: 50%;
+  background-color: rgba(148, 163, 184, 0.12);
+}
+
+.cropper-preview-banner {
+  width: 100%;
+  min-height: 116px;
+  border-radius: 18px;
+  background-color: rgba(148, 163, 184, 0.12);
+}
+
+.cropper-stage :deep(.cropper-view-box) {
+  outline: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.22);
 }
 
 @media (max-width: 1100px) {
@@ -1432,6 +2131,14 @@ watch(filteredRecords, (nextRecords) => {
 
   .profile-stats {
     grid-template-columns: 1fr;
+  }
+
+  .cropper-dialog-body {
+    grid-template-columns: 1fr;
+  }
+
+  .cropper-stage {
+    min-height: 320px;
   }
 }
 </style>

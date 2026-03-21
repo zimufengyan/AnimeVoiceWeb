@@ -1,9 +1,10 @@
 # database.py
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Index
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Index, Date, BigInteger
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship, backref
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timedelta
+from datetime import date as date_type
 from pydantic import BaseModel
 from typing import List, Optional, Tuple
 import logging
@@ -15,6 +16,8 @@ from form_fast import UserItem, AudioRecordItem
 
 # ----------------------- 数据库配置 -----------------------
 class DatabaseConfig:
+    UID_BASE = 100000000
+
     def __init__(self, database_url):
         self.DATABASE_URL = database_url
         self.async_engine = create_async_engine(self.DATABASE_URL, echo=True)
@@ -25,7 +28,79 @@ class DatabaseConfig:
     async def init_models(self):
         async with self.async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await self.ensure_userinfo_profile_columns(conn)
         logging.info("Database schema ensured successfully")
+
+    async def ensure_userinfo_profile_columns(self, conn):
+        """
+        为 userinfo 表补齐个人中心需要的新字段。
+        这里直接走轻量 DDL，适合当前用户量很小的场景。
+        """
+        await conn.execute(
+            sa.text(
+                """
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'userinfo' AND column_name = 'index'
+                    ) AND NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'userinfo' AND column_name = 'uid'
+                    ) THEN
+                        ALTER TABLE userinfo RENAME COLUMN "index" TO uid;
+                    END IF;
+                END $$;
+                """
+            )
+        )
+        await conn.execute(sa.text("ALTER TABLE userinfo ALTER COLUMN age DROP NOT NULL"))
+        await conn.execute(
+            sa.text(
+                f"""
+                ALTER TABLE userinfo
+                ALTER COLUMN uid TYPE BIGINT
+                USING (
+                    CASE
+                        WHEN uid IS NULL OR btrim(uid::text) = '' THEN NULL
+                        WHEN uid::bigint >= {self.UID_BASE} THEN uid::bigint
+                        ELSE {self.UID_BASE} + uid::bigint - 1
+                    END
+                )
+                """
+            ),
+        )
+        await conn.execute(sa.text("ALTER TABLE userinfo ADD COLUMN IF NOT EXISTS signature TEXT"))
+        await conn.execute(sa.text("ALTER TABLE userinfo ADD COLUMN IF NOT EXISTS profile_banner TEXT"))
+        await conn.execute(sa.text("ALTER TABLE userinfo ADD COLUMN IF NOT EXISTS birthday DATE"))
+        await conn.execute(sa.text("ALTER TABLE userinfo ADD COLUMN IF NOT EXISTS gender VARCHAR(16)"))
+        await conn.execute(
+            sa.text(
+                f"""
+                UPDATE userinfo
+                SET uid = {self.UID_BASE} + id - (
+                    SELECT MIN(id) FROM userinfo
+                )
+                WHERE uid IS NULL OR uid < {self.UID_BASE}
+                """
+            ),
+        )
+        await conn.execute(sa.text("UPDATE userinfo SET signature = '' WHERE signature IS NULL"))
+        await conn.execute(sa.text("UPDATE userinfo SET profile_banner = '' WHERE profile_banner IS NULL"))
+        await conn.execute(sa.text("UPDATE userinfo SET gender = '' WHERE gender IS NULL"))
+        await conn.execute(
+            sa.text(
+                """
+                UPDATE userinfo
+                SET age = DATE_PART('year', AGE(CURRENT_DATE, birthday))::BIGINT
+                WHERE birthday IS NOT NULL
+                """
+            )
+        )
+        await conn.execute(sa.text("UPDATE userinfo SET age = NULL WHERE birthday IS NULL"))
+        await conn.execute(
+            sa.text('CREATE UNIQUE INDEX IF NOT EXISTS idx_userinfo_uid_unique ON userinfo (uid)')
+        )
 
 
 # ----------------------- 基类模型 -----------------------
@@ -46,8 +121,12 @@ class UserInfo(Base):
     rate = Column(String(5))
     create_time = Column(DateTime, default=datetime.utcnow)
     update_time = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    index = Column(String(255))
+    uid = Column(BigInteger, unique=True)
     salt = Column(String(64))
+    signature = Column(String)
+    profile_banner = Column(String)
+    birthday = Column(Date)
+    gender = Column(String(16))
 
     def to_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -103,8 +182,12 @@ class UserItem(BaseModel):
     rate: Optional[str] = None
     create_time: Optional[datetime] = None
     update_time: Optional[datetime] = None
-    index: Optional[str] = None
+    uid: Optional[int] = None
     salt: Optional[str] = None
+    signature: Optional[str] = None
+    profile_banner: Optional[str] = None
+    birthday: Optional[date_type] = None
+    gender: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -112,7 +195,7 @@ class UserItem(BaseModel):
 
 # ----------------------- 数据库管理器 -----------------------
 class UserManager:
-    __ID_BASE__ = 10000000
+    __UID_BASE__ = 100000000
 
     def __init__(self, db_config: DatabaseConfig):
         self.db_config = db_config
@@ -124,24 +207,35 @@ class UserManager:
     async def insert_user(self, user_item: UserItem) -> tuple:
         async with self.db_config.async_session_maker() as session:
             try:
-                # 计算用户ID
-                count = await self.count_all_users(session)
-                user_id = count + 1 + self.__ID_BASE__
+                next_uid = user_item.uid or await self.generate_next_uid(session)
 
                 # 创建 ORM 对象
                 user = UserInfo(
-                    id=user_id,
-                    **user_item.dict(exclude={'id'})
+                    **user_item.dict(exclude={'id', 'uid'}),
+                    uid=next_uid,
                 )
 
                 session.add(user)
                 await session.commit()
+                await session.refresh(user)
                 logging.info(f'Insert user successfully! ID: {user.id}')
                 return user.id, True
             except Exception as e:
                 await session.rollback()
                 logging.error(f"Error inserting user: {e}")
                 return None, False
+
+    async def generate_next_uid(self, session: AsyncSession) -> int:
+        """
+        生成下一个九位展示 UID，从 100000000 开始递增。
+        :param session: 当前数据库会话。
+        """
+        stmt = select(func.max(UserInfo.uid))
+        result = await session.execute(stmt)
+        current_max_uid = result.scalar()
+        if current_max_uid is None or current_max_uid < self.__UID_BASE__:
+            return self.__UID_BASE__
+        return int(current_max_uid) + 1
 
     async def update_user(self, user_id: int, updates: dict) -> bool:
         async with self.db_config.async_session_maker() as session:
@@ -187,6 +281,17 @@ class UserManager:
     async def get_user_by_id(self, user_id: int) -> Optional[UserItem]:
         async with self.db_config.async_session_maker() as session:
             stmt = select(UserInfo).where(UserInfo.id == user_id)
+            result = await session.execute(stmt)
+            user = result.scalar_one_or_none()
+            return UserItem.from_orm(user) if user else None
+
+    async def get_user_by_uid(self, uid: int) -> Optional[UserItem]:
+        """
+        根据对外展示 UID 获取用户资料。
+        :param uid: 九位展示 UID。
+        """
+        async with self.db_config.async_session_maker() as session:
+            stmt = select(UserInfo).where(UserInfo.uid == uid)
             result = await session.execute(stmt)
             user = result.scalar_one_or_none()
             return UserItem.from_orm(user) if user else None

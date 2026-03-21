@@ -145,9 +145,8 @@ let registerResponse = reactive<RegisterResponseData>({
   },
   username: '',
   avatar: '',
-  index: '',
+  uid: '',
   rate: '',
-  id: '',
 })
 
 // 表单验证规则
