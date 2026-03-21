@@ -10,6 +10,8 @@ import type {
   ProfileUploadResponseData,
   RegisterForm,
   RegisterResponseData,
+  ResetPasswordForm,
+  ResetPasswordResponseData,
   UpdateProfilePayload,
   UserProfile,
 } from './util/types'
@@ -23,6 +25,8 @@ const API = {
   LOGIN: `${BASEURL}/login`,
   LOGOUT: `${BASEURL}/logout`,
   REGISTER: `${BASEURL}/register`,
+  FORGOT_PASSWORD_SEND_CODE: `${BASEURL}/forgot_password/send_code`,
+  FORGOT_PASSWORD_RESET: `${BASEURL}/forgot_password/reset`,
   EMAILCODE: `${BASEURL}/get_email_code`,
   BCRYPTSALT: `${BASEURL}/get_salt`,
   CHARSTATICURL: `${BASEURL}/get_belong_statics`,
@@ -150,7 +154,14 @@ export const registerApi = async (data: RegisterForm): Promise<RegisterResponseD
   const response = await request<unknown, RegisterApiRaw>({
     url: API.REGISTER,
     method: 'POST',
-    data,
+    data: {
+      email: data.email,
+      username: data.username,
+      password: data.password,
+      repassword: data.repassword,
+      validation_code: data.validationCode,
+      salt: data.salt,
+    },
   })
 
   return {
@@ -160,6 +171,31 @@ export const registerApi = async (data: RegisterForm): Promise<RegisterResponseD
     rate: response.rate,
     meta: response.meta,
   }
+}
+
+export const sendResetPasswordCodeApi = async (
+  email: string,
+): Promise<{ code?: string | number; message?: string }> => {
+  return await request({
+    url: API.FORGOT_PASSWORD_SEND_CODE,
+    method: 'POST',
+    data: { email },
+  })
+}
+
+export const resetPasswordApi = async (
+  data: ResetPasswordForm,
+): Promise<ResetPasswordResponseData> => {
+  return await request<unknown, ResetPasswordResponseData>({
+    url: API.FORGOT_PASSWORD_RESET,
+    method: 'POST',
+    data: {
+      email: data.email,
+      password: data.password,
+      validation_code: data.validationCode,
+      salt: data.salt,
+    },
+  })
 }
 
 export const getStaticsUrlApi = async (belong: string): Promise<BelongStaticsResponseData> => {

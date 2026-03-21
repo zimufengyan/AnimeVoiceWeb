@@ -167,6 +167,7 @@ class Settings(BaseSettings):
     MAIL_PASSWORD: str = Field(default="", validation_alias="MAIL_PASSWORD")
     CODE_TIMEOUT: int = Field(default=300, validation_alias="CODE_TIMEOUT")
     CODE_REDIS_KEY_PERFIX: str = Field(default="email_code:", validation_alias="CODE_REDIS_KEY_PREFIX")
+    RESET_CODE_REDIS_KEY_PREFIX: str = Field(default="reset_code:", validation_alias="RESET_CODE_REDIS_KEY_PREFIX")
 
     # GPT-SoVITS 配置
     SOVITS_ADDR: str = Field(default="http://10.60.102.53:25327", validation_alias="SOVITS_ADDR")

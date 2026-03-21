@@ -19,6 +19,14 @@ export type RegisterForm = {
   salt: string
 }
 
+export type ResetPasswordForm = {
+  email: string
+  password: string
+  repassword: string
+  validationCode: string
+  salt: string
+}
+
 export type MetaForm = {
   code: string
   message: string
@@ -82,6 +90,11 @@ export type RegisterResponseData = {
   uid: string
   rate: string
   meta: MetaForm
+}
+
+export type ResetPasswordResponseData = {
+  code: string | number
+  message: string
 }
 
 export type GenerateVoiceResponseData = {

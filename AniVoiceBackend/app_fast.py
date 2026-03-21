@@ -164,6 +164,90 @@ def model_config_error_response(message: str) -> JSONResponse:
     )
 
 
+def get_email_code_redis_key(email: str, prefix: str) -> str:
+    """
+    生成验证码在 Redis 中的存储键。
+    :param email: 目标邮箱。
+    :param prefix: 当前业务使用的键前缀。
+    """
+    return f"{prefix}{email.lower()}"
+
+
+def load_email_code_from_redis(email: str, prefix: str) -> Optional[str]:
+    """
+    从 Redis 读取邮箱验证码。
+    :param email: 目标邮箱。
+    :param prefix: 当前业务使用的键前缀。
+    """
+    return redis_client.get(get_email_code_redis_key(email, prefix))
+
+
+def consume_email_code(email: str, code: str, prefix: str) -> tuple[bool, str]:
+    """
+    校验并消费邮箱验证码，避免同一验证码重复使用。
+    :param email: 目标邮箱。
+    :param code: 用户提交的验证码。
+    :param prefix: 当前业务使用的键前缀。
+    """
+    redis_key = get_email_code_redis_key(email, prefix)
+    cached_code = redis_client.get(redis_key)
+    if not cached_code:
+        return False, "验证码不存在或已过期"
+    if cached_code.strip() != code.strip():
+        return False, "验证码错误"
+    redis_client.delete(redis_key)
+    return True, ""
+
+
+async def send_verification_code_email(
+    email: str,
+    subject: str,
+    body_builder,
+    redis_prefix: str,
+) -> JSONResponse | dict:
+    """
+    向指定邮箱发送业务验证码，并写入 Redis。
+    :param email: 接收验证码的邮箱地址。
+    :param subject: 邮件主题。
+    :param body_builder: 负责生成邮件正文的回调。
+    :param redis_prefix: 当前业务使用的 Redis 键前缀。
+    """
+    if fast_mail is None:
+        return JSONResponse(
+            content={"code": -1, "message": "邮件服务未配置，请先设置 MAIL_USERNAME 和 MAIL_PASSWORD"},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    if not validate_email(email):
+        return JSONResponse(content={"code": "-1", "message": "邮箱格式错误"}, status_code=400)
+
+    verification_code = ''.join(random.choices('0123456789', k=6))
+    timeout = settings.CODE_TIMEOUT
+    body = body_builder(verification_code, timeout)
+
+    try:
+        message = MessageSchema(
+            subject=subject,
+            recipients=[email],
+            body=body,
+            subtype="plain"
+        )
+        await fast_mail.send_message(message)
+        redis_client.setex(
+            get_email_code_redis_key(email, redis_prefix),
+            timeout,
+            verification_code,
+        )
+        logging.info("verification code sent to %s for prefix %s", email, redis_prefix)
+        return {"code": 1, "message": "验证码发送成功"}
+    except Exception as exc:
+        logging.error("邮件发送失败: %s", str(exc), exc_info=True)
+        return JSONResponse(
+            content={"code": -1, "message": f"发送邮件失败: {str(exc)}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
 def build_avatar_url(request: Request, avatar_filename: Optional[str]) -> str:
     """
     根据当前请求和头像字段内容生成可访问的头像地址。
@@ -409,6 +493,10 @@ async def startup_event():
 # ----------------------- 路由部分 -----------------------
 @app.post("/login", response_model=LoginRegisterResponse)
 async def login(form: LoginRequest = Body(...)):
+    """
+    处理用户登录，兼容前端已加密密码和明文密码两种输入方式。
+    :param form: 登录表单，请求中 password 可能是明文，也可能是前端按 salt 预先加密后的值。
+    """
     logging.info('post for login')
     
     user = await user_manager.get_user_by_email(form.email)
@@ -419,7 +507,14 @@ async def login(form: LoginRequest = Body(...)):
             detail="User not found"
         )
     
-    if not pwd_context.verify(form.password, user.pwd):
+    password_matches = form.password == user.pwd
+    if not password_matches:
+        try:
+            password_matches = pwd_context.verify(form.password, user.pwd)
+        except Exception:
+            password_matches = False
+
+    if not password_matches:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="incorrect password"
@@ -441,50 +536,155 @@ async def login(form: LoginRequest = Body(...)):
     }
 
 
+@app.post("/register", response_model=LoginRegisterResponse)
+async def register(form: RegisterRequest = Body(...)):
+    """
+    处理用户注册，完成验证码校验、默认资料生成和用户落库。
+    :param form: 前端提交的注册表单，密码为前端已加密后的 bcrypt 结果。
+    """
+    logging.info('post for register')
+
+    existing_user = await user_manager.get_user_by_email(form.email)
+    if existing_user:
+        return JSONResponse(
+            content={"meta": {"code": "2", "message": "该邮箱已注册"}},
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    code_ok, code_message = consume_email_code(
+        form.email,
+        form.validation_code,
+        settings.CODE_REDIS_KEY_PERFIX,
+    )
+    if not code_ok:
+        return JSONResponse(
+            content={"meta": {"code": "3", "message": code_message}},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    rate = generate_rate()
+    avatar_path = get_random_image(settings.DEFAULT_ICON_DIR)
+    avatar_name = os.path.basename(avatar_path) if avatar_path else ""
+
+    user_item = UserItem(
+        name=form.username.strip(),
+        sex=0,
+        pic=avatar_name,
+        pwd=form.password,
+        phone="",
+        email=form.email.lower(),
+        rate=rate,
+        salt=form.salt,
+        signature="",
+        profile_banner="",
+        gender="",
+        birthday=None,
+        age=None,
+    )
+
+    user_id, success = await user_manager.insert_user(user_item)
+    if not success or user_id is None:
+        return JSONResponse(
+            content={"meta": {"code": "-1", "message": "注册失败，请稍后重试"}},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    created_user = await user_manager.get_user_by_id(user_id)
+    if created_user is None:
+        return JSONResponse(
+            content={"meta": {"code": "-1", "message": "注册成功但用户资料读取失败"}},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    avatar_url = build_optional_asset_url(addr, created_user.pic, settings.UPLOAD_ICONS_LOCAL_DIR)
+    return {
+        "meta": MetaResponse(code="1", message="注册成功"),
+        "username": created_user.name,
+        "avatar": avatar_url,
+        "uid": created_user.uid,
+        "rate": created_user.rate,
+    }
+    
+
 @app.get('/get_email_code')
 async def get_email_code(email: str):
     logging.info(f'get email code for {email}')
-    if fast_mail is None:
+    return await send_verification_code_email(
+        email=email,
+        subject="注册验证码",
+        body_builder=lambda verification_code, timeout: (
+            f"您好，您正在注册 AnimeVoice，验证码是：{verification_code}，"
+            f"请在 {timeout // 60} 分钟内完成注册。"
+        ),
+        redis_prefix=settings.CODE_REDIS_KEY_PERFIX,
+    )
+
+
+@app.post("/forgot_password/send_code")
+async def send_reset_password_code(form: EmailCodeRequest = Body(...)):
+    """
+    向已注册邮箱发送找回密码验证码。
+    :param form: 仅包含邮箱地址的请求体。
+    """
+    logging.info("send reset password code for %s", form.email)
+    user = await user_manager.get_user_by_email(form.email)
+    if not user:
         return JSONResponse(
-            content={"code": -1, "message": "邮件服务未配置，请先设置 MAIL_USERNAME 和 MAIL_PASSWORD"},
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            content={"code": "3", "message": "该用户不存在, 请注册"},
+            status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    # 验证邮箱格式
-    if not validate_email(email):
-        return JSONResponse(content={"code" : "-1", "messaage": "邮箱格式错误"}, status_code=201)
-    
-    # 随机生成6位验证码
-    verification_code = ''.join(random.choices('0123456789', k=6))
-    timeout = settings.CODE_TIMEOUT
+    return await send_verification_code_email(
+        email=form.email,
+        subject="密码重置验证码",
+        body_builder=lambda verification_code, timeout: (
+            f"您好，您正在重置 AnimeVoice 账号密码，验证码是：{verification_code}，"
+            f"请在 {timeout // 60} 分钟内完成操作。如非本人操作，请忽略本邮件。"
+        ),
+        redis_prefix=settings.RESET_CODE_REDIS_KEY_PREFIX,
+    )
 
-    # 构造邮件内容
-    subject = "验证码"
-    body = f"您好, 您正在注册本网站，您的验证码是：{verification_code}，请在 {timeout // 60} 分钟内使用。"
 
-    try:
-        # 发送邮件（异步）
-        message = MessageSchema(
-            subject=subject,
-            recipients=[email],
-            body=body,
-            subtype="plain"
-        )
-        await fast_mail.send_message(message)
-        logging.info(f"验证码已发送至 {email}")
-        
-        # 存储至 Redis
-        redis_key = f"{settings.CODE_REDIS_KEY_PERFIX}{email}"
-        redis_client.setex(redis_key, timeout, verification_code)
-        
-        return {"code": 1, "message": "验证码发送成功"}
-    
-    except Exception as e:
-        logging.error(f"邮件发送失败: {str(e)}", exc_info=True)
+@app.post("/forgot_password/reset")
+async def reset_password(form: ResetPasswordRequest = Body(...)):
+    """
+    校验重置验证码并更新用户密码哈希与 salt。
+    :param form: 包含邮箱、验证码、前端加密密码和 salt 的请求体。
+    """
+    logging.info("reset password for %s", form.email)
+    user = await user_manager.get_user_by_email(form.email)
+    if not user:
         return JSONResponse(
-            content={"code": -1, "message": f"发送邮件失败: {str(e)}"},
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            content={"code": "3", "message": "该用户不存在, 请注册"},
+            status_code=status.HTTP_404_NOT_FOUND,
         )
+
+    code_ok, code_message = consume_email_code(
+        form.email,
+        form.validation_code,
+        settings.RESET_CODE_REDIS_KEY_PREFIX,
+    )
+    if not code_ok:
+        return JSONResponse(
+            content={"code": "4", "message": code_message},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    updated = await user_manager.update_user(
+        user.id,
+        {
+            "pwd": form.password,
+            "salt": form.salt,
+            "update_time": datetime.utcnow(),
+        },
+    )
+    if not updated:
+        return JSONResponse(
+            content={"code": "-1", "message": "密码重置失败，请稍后重试"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    return {"code": "1", "message": "密码重置成功"}
 
 
 @app.post("/logout")

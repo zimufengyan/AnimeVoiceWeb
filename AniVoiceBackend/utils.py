@@ -7,7 +7,7 @@ import requests
 import sys
 import httpx
 
-rates = {'S': 0.02, 'A': 0.1, 'B': 0.4, 'C': 0.4, 'D': 0.08}  
+rates = {'S': 0.02, 'A': 0.08, 'B': 0.4, 'C': 0.4, 'D': 0.1}  
 
 
 class ColorFilter(logging.Filter):

@@ -1,7 +1,7 @@
 # for FastAPI.
 
 from typing import List, Optional
-from pydantic import AliasChoices, BaseModel, Field, EmailStr, field_validator, StringConstraints 
+from pydantic import AliasChoices, BaseModel, Field, EmailStr, field_validator, model_validator, StringConstraints 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, date
 from typing_extensions import Annotated
@@ -28,11 +28,12 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., example="email@example.com")
     username: Annotated[str, StringConstraints(
-        strip_whitespace=True, min_length=4, 
+        strip_whitespace=True, min_length=4,
         max_length=10, pattern=r"^[\p{L}0-9_&@*~:?<>]+$")] = Field(..., example="username") # type: ignore
     password: str = Field(..., example="password")
+    repassword: Optional[str] = Field(default=None, example="password")
     validation_code: Annotated[str, StringConstraints(
-        strip_whitespace=True, min_length=6, 
+        strip_whitespace=True, min_length=6,
         max_length=6, pattern=r"^[A-Za-z0-9]+$")] = Field(..., example="123456") # type: ignore
     salt: str = Field(..., example="salt")
 
@@ -48,6 +49,26 @@ class RegisterRequest(BaseModel):
             }]
         }
     }
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_payload_keys(cls, data):
+        """兼容前端沿用的 camelCase 字段名。"""
+        if isinstance(data, dict) and "validationCode" in data and "validation_code" not in data:
+            data = dict(data)
+            data["validation_code"] = data.pop("validationCode")
+        return data
+
+    @field_validator("repassword")
+    @classmethod
+    def validate_repassword(cls, value: Optional[str], info):
+        """兼容前端重复密码字段，并在后端补一层一致性校验。"""
+        if value in (None, ""):
+            return value
+        password = info.data.get("password") if info and info.data else None
+        if password is not None and value != password:
+            raise ValueError("repassword must be the same as password")
+        return value
 
 
 
@@ -76,6 +97,28 @@ class LoginRegisterResponse(BaseModel):
 class GetSaltResponse(BaseModel):
     meta: MetaResponse
     salt: str = ''
+
+
+class EmailCodeRequest(BaseModel):
+    email: EmailStr = Field(..., example="email@example.com")
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., example="email@example.com")
+    password: str = Field(..., example="password")
+    validation_code: Annotated[str, StringConstraints(
+        strip_whitespace=True, min_length=6,
+        max_length=6, pattern=r"^[A-Za-z0-9]+$")] = Field(..., example="123456") # type: ignore
+    salt: str = Field(..., example="salt")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_payload_keys(cls, data):
+        """兼容前端沿用的 camelCase 字段名。"""
+        if isinstance(data, dict) and "validationCode" in data and "validation_code" not in data:
+            data = dict(data)
+            data["validation_code"] = data.pop("validationCode")
+        return data
 
 
 class GenerateVoiceResponse(BaseModel):
@@ -176,7 +219,6 @@ class UpdateProfileRequest(BaseModel):
         if value in (None, "", "male", "female", "private"):
             return value
         raise ValueError("gender must be one of '', 'male', 'female', 'private'")
-
 
 class ProfileUploadResponse(BaseModel):
     meta: MetaResponse

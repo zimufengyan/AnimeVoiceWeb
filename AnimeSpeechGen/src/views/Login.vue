@@ -201,7 +201,7 @@ const handleClick = (tab: TabsPaneContext, event: Event) => {
 }
 
 const gotoForgetPw = () => {
-  // router.push('/login');
+  router.push('/forgot-password')
 }
 const goToRegister = () => {
   router.push('/register')
