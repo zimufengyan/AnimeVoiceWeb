@@ -8,6 +8,8 @@ type StoredUser = {
   avatar: string
   index: string
   rate: string
+  signature?: string
+  profileBanner?: string
 }
 
 const emptyUser = (): StoredUser => ({
@@ -15,6 +17,8 @@ const emptyUser = (): StoredUser => ({
   avatar: '',
   index: '',
   rate: '',
+  signature: '',
+  profileBanner: '',
 })
 
 const parseStoredUser = (): StoredUser => {
@@ -78,6 +82,20 @@ export const useUserStore = defineStore('user', {
       this.user = emptyUser()
       localStorage.removeItem('token')
       localStorage.removeItem('user')
+    },
+
+    /**
+     * 更新当前登录用户的本地资料信息，并同步写回 localStorage。
+     * @param profilePatch 允许局部更新昵称、头像、评级、签名与横幅图。
+     */
+    updateProfile(
+      profilePatch: Partial<Pick<StoredUser, 'username' | 'avatar' | 'rate' | 'signature' | 'profileBanner'>>,
+    ) {
+      this.user = {
+        ...this.user,
+        ...profilePatch,
+      }
+      localStorage.setItem('user', JSON.stringify(this.user))
     },
   },
 })

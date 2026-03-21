@@ -230,6 +230,17 @@ const formatTime = (time?: string) => {
   if (Number.isNaN(date.getTime())) return time
   return date.toLocaleString('zh-CN', { hour12: false })
 }
+
+/**
+ * 获取当前页面实际负责滚动的主内容容器，供返回顶部按钮绑定目标。
+ * @returns 主内容滚动元素；如果尚未挂载则回退到文档根节点。
+ */
+const getBackTopTarget = () => {
+  return (
+    (document.querySelector('.app-scroll-container') as HTMLElement | null) ||
+    document.documentElement
+  )
+}
 </script>
 
 <template>
@@ -240,7 +251,7 @@ const formatTime = (time?: string) => {
         <CloudDownloadOutlined />
       </template>
     </a-float-button>
-    <a-back-top :visibility-height="0" />
+    <a-back-top :visibility-height="80" :target="getBackTopTarget" />
   </a-float-button-group>
 
   <audio

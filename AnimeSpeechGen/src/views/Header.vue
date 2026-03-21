@@ -82,15 +82,16 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/counter'
 const router = useRouter()
 const userStore = useUserStore()
+const { token, user } = storeToRefs(userStore)
 
-const isLoggedIn = ref(userStore.token !== '') // 如果 token 不为空，表示已登录
-const user = ref(userStore.user)
-const username = ref(userStore.getUsername)
+const isLoggedIn = computed(() => token.value !== '')
+const username = computed(() => user.value?.username || 'Guest')
 
 // 跳转到登录页
 const goToLogin = () => {

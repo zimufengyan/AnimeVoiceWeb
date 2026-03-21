@@ -4,6 +4,7 @@ import Login from '@/views/Login.vue'
 import Register from '@/views/Register.vue'
 import SeachHome from '@/views/SeachHome.vue'
 import VoiceGenerationView from '@/views/VoiceGenerationView.vue'
+import ProfileView from '@/views/ProfileView.vue'
 import { voiceIpConfigs } from '@/config/voiceIp'
 
 /**
@@ -27,6 +28,7 @@ const router = createRouter({
       component: HomeView,
       children: [
         { path: '', name: 'home', component: SeachHome },
+        { path: 'profile', name: 'profile', component: ProfileView },
         ...voiceIpRoutes,
       ],
     },
