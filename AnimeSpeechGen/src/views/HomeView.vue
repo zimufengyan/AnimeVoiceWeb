@@ -1,38 +1,27 @@
 <template>
-  <el-container class="background-container">
-    <el-header class="el-header">
-      <Header />
-    </el-header>
-    <el-main class="el-main app-scroll-container">
-      <RouterView>
-      </RouterView>
-
-    </el-main>
-
-  </el-container>
+  <div class="app-shell">
+    <Header />
+    <main class="app-main app-scroll-container">
+      <RouterView />
+    </main>
+  </div>
 </template>
 
 <script lang="ts" setup>
 import Header from './Header.vue';
-
-
 </script >
 
 <style scoped>
-.background-container {
+.app-shell {
   width: 100%;
   height: 100%;
 }
 
-.el-header {
-  padding: 0;
-}
-
-.el-main.app-scroll-container {
-  height: calc(100vh - 60px);
+.app-main.app-scroll-container {
+  height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-top: 0.5rem;
-  padding-bottom: 1rem;
+  padding-top: 92px;
+  padding-bottom: 1.25rem;
 }
 </style>

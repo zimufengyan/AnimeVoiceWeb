@@ -110,6 +110,30 @@ export type BelongStaticsResponseData = {
   avators: string[]
 }
 
+export type IpCharacterItem = {
+  key: string
+  displayName: string
+  englishName: string
+  avatarUrl: string
+  standUrl: string
+  order: number
+  tags: string[]
+  accent?: string
+  aliases: string[]
+  available?: boolean
+}
+
+export type IpCharactersResponseData = {
+  code?: string | number
+  ip: {
+    belong: string
+    key: string
+    displayName: string
+    englishName: string
+  }
+  characters: IpCharacterItem[]
+}
+
 export type AudioRecordsResponseData = {
   meta?: MetaForm
   records: AudioRecord[]

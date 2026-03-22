@@ -7,7 +7,6 @@ export type VoiceIpConfig = {
   routePath: string
   displayName: string
   icon: string
-  characterNameAliasMap?: Record<string, string>
 }
 
 /**
@@ -21,11 +20,6 @@ export const voiceIpConfigs: VoiceIpConfig[] = [
     routePath: '/genshin',
     displayName: '原神',
     icon: GenShinLogo,
-    characterNameAliasMap: {
-      'Kamizato Ayaka': 'Ayaka',
-      'Kamisato Ayaka': 'Ayaka',
-      'Yae Miko': 'YaeMiko',
-    },
   },
   {
     belong: 'StarRail',

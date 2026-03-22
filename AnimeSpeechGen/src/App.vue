@@ -12,6 +12,8 @@ import { onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/counter'
 import { getAudioRecordsApi, deleteAudioRecordApi, deleteAudioRecordsApi } from './api'
 import type { AudioRecord } from '@/util/types'
+import AuthDialog from '@/components/auth/AuthDialog.vue'
+import { openAuthDialog } from '@/composables/useAuthDialog'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -41,11 +43,10 @@ const clickAudio = (data: string) => {
 }
 
 const gotoLogin = () => {
-  router.push('/login')
+  openAuthDialog('login', {
+    redirectTo: router.currentRoute.value.fullPath,
+  })
   open.value = false
-
-  // 如果要新窗口打开（备选方案）
-  // window.open('/login', '_blank');
 }
 
 const open = ref<boolean>(false)
@@ -276,13 +277,14 @@ onBeforeUnmount(() => {
 
 <template>
   <RouterView />
-  <a-float-button-group shape="circle" :style="{ right: '100px' }">
-    <a-float-button v-if="showBackTop" tooltip="返回顶部" @click="scrollToTop">
+  <AuthDialog />
+  <a-float-button-group class="app-float-actions" shape="circle" :style="{ right: '100px' }">
+    <a-float-button class="app-float-action" v-if="showBackTop" tooltip="返回顶部" @click="scrollToTop">
       <template #icon>
         <VerticalAlignTopOutlined />
       </template>
     </a-float-button>
-    <a-float-button tooltip="语音生成记录" @click="showDrawer">
+    <a-float-button class="app-float-action" tooltip="语音生成记录" @click="showDrawer">
       <template #icon>
         <CloudDownloadOutlined />
       </template>
@@ -446,5 +448,29 @@ el-header {
 .record-created-at {
   color: #909399;
   font-size: 12px;
+}
+
+:deep(.app-float-actions .ant-float-btn-body) {
+  color: #eff9fb;
+  background:
+    linear-gradient(180deg, rgba(17, 40, 58, 0.94), rgba(23, 58, 77, 0.94)),
+    linear-gradient(135deg, rgba(108, 195, 185, 0.28), rgba(255, 209, 149, 0.18));
+  border: 1px solid rgba(162, 220, 214, 0.3);
+  box-shadow:
+    0 18px 38px rgba(15, 42, 57, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+:deep(.app-float-actions .ant-float-btn:hover .ant-float-btn-body) {
+  color: #ffffff;
+  background:
+    linear-gradient(180deg, rgba(21, 51, 73, 0.98), rgba(31, 69, 91, 0.96)),
+    linear-gradient(135deg, rgba(108, 195, 185, 0.34), rgba(255, 209, 149, 0.22));
+  transform: translateY(-1px);
+}
+
+:deep(.app-float-actions .ant-float-btn-icon) {
+  font-size: 18px;
 }
 </style>

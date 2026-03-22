@@ -363,13 +363,47 @@ with open(character_info_path, 'r', encoding='utf-8') as f:
     character_dic = json.loads(f.read())
     logging.info("successfuy load character_info.json")
 
+ip_characters_manifest_path = settings.IP_CHARACTERS_MANIFEST
+with open(ip_characters_manifest_path, 'r', encoding='utf-8') as f:
+    ip_characters_manifest = json.loads(f.read())
+    logging.info("successfully load ip_characters.json")
+
 current_activated_character = None  # 当前激活的角色
 
-CHARACTER_NAME_ALIASES = {
-    "Kamizato Ayaka": "Ayaka",
-    "Kamisato Ayaka": "Ayaka",
-    "Yae Miko": "YaeMiko",
-}
+
+def normalize_character_lookup_key(value: str) -> str:
+    """将角色名或素材名统一转换为可比较的查找键。"""
+    return os.path.splitext(value or "")[0].strip().replace(" ", "").lower()
+
+
+def get_ip_character_config(belong: Optional[str]) -> dict:
+    """返回指定 IP 的角色清单配置。"""
+    return ip_characters_manifest.get(belong or "", {})
+
+
+def get_ip_character_entries(belong: Optional[str]) -> list[dict]:
+    """返回按顺序排序后的角色清单。"""
+    characters = get_ip_character_config(belong).get("characters", [])
+    return sorted(characters, key=lambda item: (item.get("order", 9999), item.get("displayName", "")))
+
+
+def find_ip_character_entry(belong: Optional[str], name: str) -> Optional[dict]:
+    """根据角色键名、展示名或别名查找统一角色清单中的角色项。"""
+    lookup_key = normalize_character_lookup_key(name)
+    if not lookup_key:
+        return None
+
+    for character_item in get_ip_character_entries(belong):
+        candidates = [
+            character_item.get("key", ""),
+            character_item.get("displayName", ""),
+            character_item.get("englishName", ""),
+            *(character_item.get("aliases", []) or []),
+        ]
+        if any(normalize_character_lookup_key(candidate) == lookup_key for candidate in candidates if candidate):
+            return character_item
+
+    return None
 
 
 def canonicalize_character_name(name: str, belong: Optional[str] = None) -> str:
@@ -382,8 +416,9 @@ def canonicalize_character_name(name: str, belong: Optional[str] = None) -> str:
     if not raw_name:
         return raw_name
 
-    if raw_name in CHARACTER_NAME_ALIASES:
-        return CHARACTER_NAME_ALIASES[raw_name]
+    manifest_character = find_ip_character_entry(belong, raw_name)
+    if manifest_character:
+        return manifest_character.get("key", raw_name)
 
     normalized_raw = raw_name.replace(" ", "").lower()
     if belong in character_dic:
@@ -1119,30 +1154,62 @@ async def download_file(filename: str):
 @app.get("/get_belong_statics")
 async def get_belong_statics(request: Request, belong: Optional[str] = Query(None)):
     logging.info(f"get belong statics for {belong}")
-    if belong not in character_dic:
+    ip_config = get_ip_character_config(belong)
+    if not ip_config:
         # 不支持的IP
-        logging.warning(f"belong {belong} not in character_dic")
+        logging.warning(f"belong {belong} not in ip_characters_manifest")
         return JSONResponse(content={"code" : "-1", "messaage": "该IP不存在"}, status_code=201)
-    
-    avators = glob.glob(os.path.join(settings.CHARACTER_AVATOR_DIR, belong, f"*.{settings.CHARACTER_AVATOR_EXT}"))
-    stands = glob.glob(os.path.join(settings.STANDS_DIR, belong, f"*.{settings.STAND_EXT}"))
-
-    stands.sort()
-    avators.sort()
-
-    logging.info(f"capture {len(stands)} stands and {len(avators)} avators")
-    if len(stands) != len(avators):
-        logging.info(f"length of stands ({len(stands)}) != length of avators ({len(avators)})")
-        return JSONResponse(content={"code" : "-2", "messaage": "角色数量不匹配"}, status_code=500)
 
     base_url = build_base_url(request)
     names, stand_urls, avator_urls = [], [], []
-    for stand, avator in zip(stands, avators):
-        names.append(canonicalize_character_name(os.path.splitext(os.path.basename(stand))[0], belong))
-        stand_urls.append(f"{base_url}/{join_url_path(settings.STANDS_LOCAL_DIR, belong, os.path.basename(stand))}")
-        avator_urls.append(f"{base_url}/{join_url_path(settings.CHARACTER_AVATOR_LOCAL_DIR, belong, os.path.basename(avator))}")
+    for character_item in get_ip_character_entries(belong):
+        names.append(character_item.get("key", ""))
+        stand_urls.append(
+            f"{base_url}/{join_url_path(settings.STANDS_LOCAL_DIR, belong, character_item.get('standFile', ''))}"
+        )
+        avator_urls.append(
+            f"{base_url}/{join_url_path(settings.CHARACTER_AVATOR_LOCAL_DIR, belong, character_item.get('avatarFile', ''))}"
+        )
 
     return {"code": 1, "names": names, "stands": stand_urls, "avators": avator_urls}
+
+
+@app.get("/get_ip_characters")
+async def get_ip_characters(request: Request, belong: Optional[str] = Query(None)):
+    logging.info(f"get ip characters for {belong}")
+    ip_config = get_ip_character_config(belong)
+    if not ip_config:
+        logging.warning(f"belong {belong} not in ip_characters_manifest")
+        return JSONResponse(content={"code": "-1", "message": "该IP不存在"}, status_code=404)
+
+    base_url = build_base_url(request)
+    characters = []
+    for character_item in get_ip_character_entries(belong):
+        characters.append(
+            {
+                "key": character_item.get("key", ""),
+                "displayName": character_item.get("displayName", ""),
+                "englishName": character_item.get("englishName", ""),
+                "avatarUrl": f"{base_url}/{join_url_path(settings.CHARACTER_AVATOR_LOCAL_DIR, belong, character_item.get('avatarFile', ''))}",
+                "standUrl": f"{base_url}/{join_url_path(settings.STANDS_LOCAL_DIR, belong, character_item.get('standFile', ''))}",
+                "order": character_item.get("order", 0),
+                "tags": character_item.get("tags", []),
+                "accent": character_item.get("accent", ""),
+                "aliases": character_item.get("aliases", []),
+                "available": character_item.get("available", True),
+            }
+        )
+
+    return {
+        "code": 1,
+        "ip": {
+            "belong": ip_config.get("belong", belong or ""),
+            "key": ip_config.get("key", ""),
+            "displayName": ip_config.get("displayName", belong or ""),
+            "englishName": ip_config.get("englishName", ip_config.get("displayName", belong or "")),
+        },
+        "characters": characters,
+    }
 
 
 # -------------------------- 启动部分 -----------------------

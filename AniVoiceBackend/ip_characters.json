@@ -1,0 +1,127 @@
+{
+  "GenShin": {
+    "belong": "GenShin",
+    "key": "genshin",
+    "displayName": "原神",
+    "englishName": "Genshin Impact",
+    "characters": [
+      {
+        "key": "Ayaka",
+        "displayName": "神里绫华",
+        "englishName": "Kamisato Ayaka",
+        "avatarFile": "Kamizato Ayaka.png",
+        "standFile": "Kamizato Ayaka.png",
+        "order": 10,
+        "tags": ["清冷", "优雅"],
+        "accent": "#90D8FF",
+        "aliases": ["Ayaka", "Kamizato Ayaka", "Kamisato Ayaka", "神里绫华"]
+      },
+      {
+        "key": "Furina",
+        "displayName": "芙宁娜",
+        "englishName": "Furina",
+        "avatarFile": "Furina.png",
+        "standFile": "Furina.png",
+        "order": 20,
+        "tags": ["华丽", "高光"],
+        "accent": "#88C8FF",
+        "aliases": ["Furina", "芙宁娜"]
+      },
+      {
+        "key": "YaeMiko",
+        "displayName": "八重神子",
+        "englishName": "Yae Miko",
+        "avatarFile": "YaeMiko.png",
+        "standFile": "Yae Miko.png",
+        "order": 30,
+        "tags": ["慵懒", "灵动"],
+        "accent": "#D29BFF",
+        "aliases": ["Yae Miko", "YaeMiko", "八重神子"]
+      },
+      {
+        "key": "Nahida",
+        "displayName": "纳西妲",
+        "englishName": "Nahida",
+        "avatarFile": "Nahida.png",
+        "standFile": "Nahida.png",
+        "order": 40,
+        "tags": ["治愈", "温柔"],
+        "accent": "#90D98F",
+        "aliases": ["Nahida", "纳西妲"]
+      },
+      {
+        "key": "Ganyu",
+        "displayName": "甘雨",
+        "englishName": "Ganyu",
+        "avatarFile": "Ganyu.png",
+        "standFile": "Ganyu.png",
+        "order": 50,
+        "tags": ["安静", "陪伴"],
+        "accent": "#8ACBF8",
+        "aliases": ["Ganyu", "甘雨"]
+      },
+      {
+        "key": "Shenhe",
+        "displayName": "申鹤",
+        "englishName": "Shenhe",
+        "avatarFile": "Shenhe.png",
+        "standFile": "Shenhe.png",
+        "order": 60,
+        "tags": ["冷冽", "肃静"],
+        "accent": "#CFE2FF",
+        "aliases": ["Shenhe", "申鹤"]
+      },
+      {
+        "key": "Arlecchino",
+        "displayName": "阿蕾奇诺",
+        "englishName": "Arlecchino",
+        "avatarFile": "Arlecchino.png",
+        "standFile": "Arlecchino.png",
+        "order": 70,
+        "tags": ["压迫", "凌厉"],
+        "accent": "#FF9D91",
+        "aliases": ["Arlecchino", "阿蕾奇诺", "仆人"]
+      },
+      {
+        "key": "Eula",
+        "displayName": "优菈",
+        "englishName": "Eula",
+        "avatarFile": "Eula.png",
+        "standFile": "Eula.png",
+        "order": 80,
+        "tags": ["冷傲", "锋芒"],
+        "accent": "#9FD6FF",
+        "aliases": ["Eula", "优菈"]
+      },
+      {
+        "key": "Paimon",
+        "displayName": "派蒙",
+        "englishName": "Paimon",
+        "avatarFile": "Paimon.png",
+        "standFile": "Paimon.png",
+        "order": 90,
+        "tags": ["元气", "活泼"],
+        "accent": "#FFD68D",
+        "aliases": ["Paimon", "派蒙"]
+      },
+      {
+        "key": "SangonomiyaKokomi",
+        "displayName": "珊瑚宫心海",
+        "englishName": "Sangonomiya Kokomi",
+        "avatarFile": "Sangonomiya Kokomi.png",
+        "standFile": "Sangonomiya Kokomi.png",
+        "order": 100,
+        "tags": ["柔和", "沉静"],
+        "accent": "#98DFFF",
+        "aliases": ["Sangonomiya Kokomi", "Kokomi", "SangonomiyaKokomi", "珊瑚宫心海", "心海"]
+      }
+    ]
+  },
+  "StarRail": {
+    "belong": "StarRail",
+    "key": "starrail",
+    "displayName": "崩坏·星穹铁道",
+    "englishName": "Honkai: Star Rail",
+    "characters": []
+  }
+}

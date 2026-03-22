@@ -1,6 +1,8 @@
 import router from '@/router'
 import axios, { type AxiosError, type AxiosRequestHeaders } from 'axios'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/counter'
+import { openAuthDialog } from '@/composables/useAuthDialog'
 
 type ApiError = Error & {
   status?: number
@@ -59,19 +61,17 @@ request.interceptors.response.use(
       let message = typeof detail === 'string' ? detail : JSON.stringify(detail)
       switch (error.response.status) {
         case 401:
-          // Token 过期，跳转登录
-          localStorage.removeItem('token')
-          router.replace({
-            path: '/login',
-            query: { redirect: router.currentRoute.value.fullPath }, // 重新登录后，返回之前的页面
+          useUserStore().clearState()
+          openAuthDialog('login', {
+            redirectTo: router.currentRoute.value.fullPath,
+            reason: 'session-expired',
           })
           break
         case 403:
-          // 返回403 清除token信息并跳转到登录页面
-          localStorage.removeItem('token')
-          router.replace({
-            path: '/login',
-            query: { redirect: router.currentRoute.value.fullPath }, // 重新登录后，返回之前的页面
+          useUserStore().clearState()
+          openAuthDialog('login', {
+            redirectTo: router.currentRoute.value.fullPath,
+            reason: 'session-expired',
           })
           break
         case 404:

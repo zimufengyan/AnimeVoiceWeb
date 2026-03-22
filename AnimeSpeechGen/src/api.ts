@@ -4,6 +4,7 @@ import type {
   BelongStaticsResponseData,
   GenerateVoiceResponseData,
   GetSaltResponseData,
+  IpCharactersResponseData,
   LoginForm,
   LoginResponseData,
   ProfileResponseData,
@@ -30,6 +31,7 @@ const API = {
   EMAILCODE: `${BASEURL}/get_email_code`,
   BCRYPTSALT: `${BASEURL}/get_salt`,
   CHARSTATICURL: `${BASEURL}/get_belong_statics`,
+  IP_CHARACTERS: `${BASEURL}/get_ip_characters`,
   GENERATE_VOICE: `${BASEURL}/generate_voice`,
   GET_AUDIO_RECORDS: `${BASEURL}/get_recent_audio_records`,
   DELETE_AURIO_RECORD: `${BASEURL}/delete_audio_record`,
@@ -201,6 +203,14 @@ export const resetPasswordApi = async (
 export const getStaticsUrlApi = async (belong: string): Promise<BelongStaticsResponseData> => {
   return await request<unknown, BelongStaticsResponseData>({
     url: API.CHARSTATICURL,
+    method: 'GET',
+    params: { belong },
+  })
+}
+
+export const getIpCharactersApi = async (belong: string): Promise<IpCharactersResponseData> => {
+  return await request<unknown, IpCharactersResponseData>({
+    url: API.IP_CHARACTERS,
     method: 'GET',
     params: { belong },
   })

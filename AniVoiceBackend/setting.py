@@ -66,6 +66,7 @@ class Config:
     UPLOAD_ICONS_LOCAL_DIR: str = "static/upload/icon/"
     PROFILE_BANNERS_DIR: str = os.path.join(STATIC_DIR, "upload", "banner")
     PROFILE_BANNERS_LOCAL_DIR: str = "static/upload/banner/"
+    IP_CHARACTERS_MANIFEST: str = os.path.join(BASE_DIR, "ip_characters.json")
     STANDS_DIR: str = os.path.join(STATIC_DIR, "stands")
     STANDS_LOCAL_DIR: str = "static/stands/"
     STAND_EXT: str = "png"
@@ -146,6 +147,7 @@ class Settings(BaseSettings):
     UPLOAD_ICONS_LOCAL_DIR: str = "static/upload/icon/"
     PROFILE_BANNERS_DIR: str = os.path.join(STATIC_DIR, "upload", "banner")
     PROFILE_BANNERS_LOCAL_DIR: str = "static/upload/banner/"
+    IP_CHARACTERS_MANIFEST: str = os.path.join(BASE_DIR, "ip_characters.json")
     STANDS_DIR: str = os.path.join(STATIC_DIR, "stands")
     STANDS_LOCAL_DIR: str = "static/stands/"
     STAND_EXT: str = "png"

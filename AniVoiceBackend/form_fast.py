@@ -133,6 +133,32 @@ class BelongStaticsResponse(BaseModel):
     names: List[str]
 
 
+class IpMetaPayload(BaseModel):
+    belong: str
+    key: str
+    displayName: str
+    englishName: str
+
+
+class IpCharacterItem(BaseModel):
+    key: str
+    displayName: str
+    englishName: str
+    avatarUrl: str
+    standUrl: str
+    order: int = 0
+    tags: List[str] = []
+    accent: Optional[str] = None
+    aliases: List[str] = []
+    available: bool = True
+
+
+class IpCharactersResponse(BaseModel):
+    meta: MetaResponse
+    ip: IpMetaPayload
+    characters: List[IpCharacterItem]
+
+
 class UserItem(BaseModel):
     id: Optional[int] = None
     name: str

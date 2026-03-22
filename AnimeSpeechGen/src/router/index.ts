@@ -1,8 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
-import Login from '@/views/Login.vue'
-import Register from '@/views/Register.vue'
-import ForgotPasswordView from '@/views/ForgotPasswordView.vue'
+import AuthRouteBridge from '@/views/AuthRouteBridge.vue'
 import SeachHome from '@/views/SeachHome.vue'
 import VoiceGenerationView from '@/views/VoiceGenerationView.vue'
 import ProfileView from '@/views/ProfileView.vue'
@@ -17,7 +15,6 @@ const voiceIpRoutes = voiceIpConfigs.map((config) => ({
   component: VoiceGenerationView,
   props: {
     belong: config.belong,
-    characterNameAliasMap: config.characterNameAliasMap || {},
   },
 }))
 
@@ -37,17 +34,26 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: Login,
+      component: AuthRouteBridge,
+      props: {
+        mode: 'login',
+      },
     },
     {
       path: '/register',
       name: 'register',
-      component: Register,
+      component: AuthRouteBridge,
+      props: {
+        mode: 'register',
+      },
     },
     {
       path: '/forgot-password',
       name: 'forgot-password',
-      component: ForgotPasswordView,
+      component: AuthRouteBridge,
+      props: {
+        mode: 'forgot-password',
+      },
     },
   ],
 })

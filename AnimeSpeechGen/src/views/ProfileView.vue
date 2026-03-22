@@ -370,6 +370,7 @@ import {
   uploadProfileBannerApi,
 } from '@/api'
 import { useUserStore } from '@/stores/counter'
+import { openAuthDialog } from '@/composables/useAuthDialog'
 import DefaultBanner from '@/assets/slideImgs/slideImg3.png'
 import DefaultAvatar from '@/assets/zmfy.jpg'
 import type { AudioRecord, UpdateProfilePayload, UserGender, UserProfile } from '@/util/types'
@@ -639,7 +640,9 @@ const startEditingSignature = async () => {
  * 跳转到登录页，供未登录状态的个人中心使用。
  */
 const goToLogin = () => {
-  router.push('/login')
+  openAuthDialog('login', {
+    redirectTo: router.currentRoute.value.fullPath,
+  })
 }
 
 /**
@@ -2136,6 +2139,200 @@ watch(filteredRecords, (nextRecords) => {
 .cropper-stage :deep(.cropper-view-box) {
   outline: 2px solid rgba(255, 255, 255, 0.92);
   box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.22);
+}
+
+.profile-page {
+  background:
+    radial-gradient(circle at top left, rgba(111, 210, 202, 0.14), transparent 24%),
+    radial-gradient(circle at top right, rgba(255, 216, 163, 0.14), transparent 22%),
+    linear-gradient(180deg, #edf7f8 0%, #f8fbfd 26%, #ffffff 100%);
+}
+
+.profile-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(7, 20, 31, 0.08), rgba(7, 20, 31, 0.42)),
+    radial-gradient(circle at top right, rgba(158, 229, 224, 0.22), transparent 26%);
+}
+
+.profile-shell {
+  width: min(1220px, calc(100% - 56px));
+}
+
+.profile-summary {
+  border: 1px solid rgba(177, 220, 220, 0.56);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(243, 250, 250, 0.86));
+  box-shadow:
+    0 28px 64px rgba(35, 74, 92, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.edit-profile-btn {
+  border-radius: 14px;
+  border-color: rgba(166, 210, 212, 0.72);
+  color: #21475b;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.meta-item {
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(179, 220, 222, 0.46);
+}
+
+.stat-card {
+  border: 1px solid rgba(177, 218, 220, 0.48);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(236, 246, 247, 0.92));
+  box-shadow:
+    0 16px 24px rgba(48, 88, 104, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.stat-value {
+  color: #1e6179;
+}
+
+.profile-content {
+  border: 1px solid rgba(180, 220, 221, 0.5);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(245, 251, 251, 0.92));
+  box-shadow:
+    0 24px 54px rgba(35, 74, 92, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+.profile-tabs :deep(.el-tabs__header) {
+  margin-bottom: 18px;
+}
+
+.profile-tabs :deep(.el-tabs__nav-wrap::after) {
+  background: rgba(182, 219, 221, 0.46);
+}
+
+.profile-tabs :deep(.el-tabs__item) {
+  color: #678391;
+  font-weight: 600;
+}
+
+.profile-tabs :deep(.el-tabs__item.is-active) {
+  color: #18465a;
+}
+
+.profile-tabs :deep(.el-tabs__active-bar) {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #66beb7, #ecb16f);
+}
+
+.history-toolbar {
+  padding: 14px 16px;
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.74), rgba(241, 249, 249, 0.82));
+  box-shadow: inset 0 0 0 1px rgba(181, 219, 221, 0.46);
+}
+
+.history-search :deep(.el-input__wrapper),
+.history-filter :deep(.el-select__wrapper),
+.page-size-select :deep(.el-select__wrapper) {
+  min-height: 42px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow:
+    0 10px 18px rgba(48, 88, 104, 0.06),
+    inset 0 0 0 1px rgba(176, 214, 216, 0.56);
+}
+
+.layout-switcher :deep(.el-radio-button__inner) {
+  border-radius: 14px;
+  border-color: rgba(176, 214, 216, 0.56);
+  background: rgba(255, 255, 255, 0.84);
+  color: #5d7988;
+  box-shadow: none;
+}
+
+.layout-switcher :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  color: #163e52;
+  border-color: transparent;
+  background: linear-gradient(135deg, rgba(128, 212, 204, 0.92), rgba(248, 204, 153, 0.92));
+  box-shadow: 0 12px 20px rgba(98, 156, 163, 0.16);
+}
+
+.history-toolbar-right :deep(.el-button),
+.profile-empty :deep(.el-button),
+.dialog-footer :deep(.el-button) {
+  border-radius: 14px;
+}
+
+.history-toolbar-right :deep(.el-button--primary),
+.profile-empty :deep(.el-button--primary),
+.dialog-footer :deep(.el-button--primary) {
+  border: none;
+  color: #123246;
+  background: linear-gradient(135deg, #72c7c0, #efbc83);
+  box-shadow: 0 14px 24px rgba(98, 156, 163, 0.16);
+}
+
+.history-card,
+.history-row {
+  border: 1px solid rgba(183, 219, 221, 0.48);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(244, 250, 251, 0.94) 100%);
+  box-shadow:
+    0 18px 28px rgba(35, 74, 92, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+.history-card:hover,
+.history-row:hover {
+  transform: translateY(-1px);
+}
+
+.belong-tag {
+  border: none;
+  color: #1e6078;
+  background: rgba(123, 209, 203, 0.18);
+}
+
+.profile-empty {
+  border: 1px solid rgba(181, 219, 221, 0.46);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(243, 250, 250, 0.9));
+}
+
+.profile-editor-dialog :deep(.el-dialog),
+.profile-cropper-dialog :deep(.el-dialog) {
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 249, 249, 0.98));
+  box-shadow:
+    0 28px 64px rgba(35, 74, 92, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.profile-editor-dialog :deep(.el-dialog__header),
+.profile-cropper-dialog :deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 24px 24px 8px;
+}
+
+.profile-editor-dialog :deep(.el-dialog__body),
+.profile-cropper-dialog :deep(.el-dialog__body) {
+  padding-top: 12px;
+}
+
+.editor-form :deep(.el-input__wrapper),
+.editor-form :deep(.el-textarea__inner),
+.editor-form :deep(.el-select__wrapper),
+.editor-form :deep(.el-date-editor.el-input__wrapper) {
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow:
+    0 10px 18px rgba(48, 88, 104, 0.06),
+    inset 0 0 0 1px rgba(176, 214, 216, 0.58);
 }
 
 @media (max-width: 1100px) {
