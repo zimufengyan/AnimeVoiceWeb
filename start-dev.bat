@@ -9,7 +9,7 @@ set "BACKEND_DIR=%ROOT_DIR%\AniVoiceBackend"
 set "ROOT_ENV=%ROOT_DIR%\.env"
 set "BACKEND_ENV=%BACKEND_DIR%\.env"
 
-set "BACKEND_ENTRY=app_fast.py"
+set "BACKEND_ENTRY=app.py"
 set "CONDA_ENV=web"
 set "POSTGRES_SERVICE_NAME="
 set "SKIP_POSTGRES="

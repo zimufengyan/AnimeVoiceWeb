@@ -1,5 +1,5 @@
 param(
-    [string]$BackendEntry = "app_fast.py",
+    [string]$BackendEntry = "app.py",
     [string]$CondaEnv = "web",
     [switch]$SameWindow,
     [switch]$SkipPostgres
@@ -190,4 +190,4 @@ Start-Process -FilePath "powershell.exe" -WorkingDirectory $BackendDir -Argument
 Write-Host ""
 Write-Host "Both start commands have been launched."
 Write-Host "If the backend entry needs to change, run:"
-Write-Host ".\start-dev.ps1 -BackendEntry app_fast.py"
+Write-Host ".\start-dev.ps1 -BackendEntry app.py"

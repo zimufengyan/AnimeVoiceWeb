@@ -1,17 +1,16 @@
 # database.py
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Index, Date, BigInteger
+import logging
+from datetime import datetime, timedelta
+from typing import List, Optional, Tuple
+
+import sqlalchemy as sa
+from sqlalchemy import BigInteger, Column, Date, DateTime, ForeignKey, Index, Integer, String, delete, exists, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship, backref
-from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime, timedelta
-from datetime import date as date_type
-from pydantic import BaseModel
-from typing import List, Optional, Tuple
-import logging
-import sqlalchemy as sa
-from sqlalchemy import select, func, delete, update, exists
 
-from form_fast import UserItem, AudioRecordItem
+from server.schemas.audio import AudioRecordItem
+from server.schemas.profile import UserItem
 
 
 # ----------------------- 数据库配置 -----------------------
@@ -167,32 +166,6 @@ class AudioRecords(Base):
     )
 
 
-    
-
-# ----------------------- Pydantic 模型 -----------------------
-class UserItem(BaseModel):
-    id: Optional[int] = None
-    name: str
-    sex: Optional[int] = None
-    age: Optional[int] = None
-    pic: Optional[str] = None
-    pwd: str
-    phone: Optional[str] = None
-    email: str
-    rate: Optional[str] = None
-    create_time: Optional[datetime] = None
-    update_time: Optional[datetime] = None
-    uid: Optional[int] = None
-    salt: Optional[str] = None
-    signature: Optional[str] = None
-    profile_banner: Optional[str] = None
-    birthday: Optional[date_type] = None
-    gender: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
 # ----------------------- 数据库管理器 -----------------------
 class UserManager:
     __UID_BASE__ = 100000000
@@ -211,7 +184,7 @@ class UserManager:
 
                 # 创建 ORM 对象
                 user = UserInfo(
-                    **user_item.dict(exclude={'id', 'uid'}),
+                    **user_item.model_dump(exclude={"id", "uid"}),
                     uid=next_uid,
                 )
 
@@ -283,7 +256,7 @@ class UserManager:
             stmt = select(UserInfo).where(UserInfo.id == user_id)
             result = await session.execute(stmt)
             user = result.scalar_one_or_none()
-            return UserItem.from_orm(user) if user else None
+            return UserItem.model_validate(user) if user else None
 
     async def get_user_by_uid(self, uid: int) -> Optional[UserItem]:
         """
@@ -294,14 +267,14 @@ class UserManager:
             stmt = select(UserInfo).where(UserInfo.uid == uid)
             result = await session.execute(stmt)
             user = result.scalar_one_or_none()
-            return UserItem.from_orm(user) if user else None
+            return UserItem.model_validate(user) if user else None
 
     async def get_user_by_email(self, email: str) -> Optional[UserItem]:
         async with self.db_config.async_session_maker() as session:
             stmt = select(UserInfo).where(UserInfo.email == email)
             result = await session.execute(stmt)
             user = result.scalar_one_or_none()
-            return UserItem.from_orm(user) if user else None
+            return UserItem.model_validate(user) if user else None
 
     async def count_all_users(self, session) -> int:
         async with self.db_config.async_session_maker() as session:
@@ -327,7 +300,7 @@ class AudioRecordManager:
 
                 # 创建 ORM 对象
                 audio_record = AudioRecords(
-                    **audio_record_item.dict()
+                    **audio_record_item.model_dump()
                 )
 
                 session.add(audio_record)
@@ -353,7 +326,7 @@ class AudioRecordManager:
             ).order_by(AudioRecords.created_at.desc())
             result = await session.execute(stmt)
             audio_records = result.scalars().all()
-            return True, [AudioRecordItem.from_orm(audio_record) for audio_record in audio_records]
+            return True, [AudioRecordItem.model_validate(audio_record) for audio_record in audio_records]
         
     async def delete_audio_record_by_id(self, audio_id: int) -> Tuple[bool, str]:
         """

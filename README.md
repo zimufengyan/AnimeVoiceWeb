@@ -59,7 +59,7 @@ SpeechGenWeb/
 后端当前默认通过以下方式启动：
 
 ```bash
-conda run -n web python app_fast.py
+conda run -n web python app.py
 ```
 
 ## 快速启动
@@ -98,7 +98,7 @@ npm run dev
 
 ```bash
 cd AniVoiceBackend
-conda run -n web python app_fast.py
+conda run -n web python app.py
 ```
 
 ## 配置说明
