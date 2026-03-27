@@ -130,7 +130,7 @@ export const loginApi = async (data: LoginForm): Promise<LoginResponseData> => {
 export const logoutApi = async (): Promise<void> => {
   await request({
     url: API.LOGOUT,
-    method: 'GET',
+    method: 'POST',
   })
 }
 

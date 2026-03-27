@@ -15,9 +15,15 @@
         <template v-if="isLoggedIn">
           <span :class="['rate-pill', rateClass]">{{ displayRate }}</span>
 
-          <el-dropdown placement="bottom-end" trigger="click" popper-class="header-user-dropdown">
+          <el-dropdown
+            placement="bottom-end"
+            trigger="hover"
+            :show-timeout="80"
+            :hide-timeout="120"
+            popper-class="header-user-dropdown"
+          >
             <button type="button" class="user-trigger">
-              <el-avatar :size="36" :src="user.avatar" class="user-avatar">
+              <el-avatar :size="40" :src="user.avatar" class="user-avatar">
                 {{ username.slice(0, 1).toUpperCase() }}
               </el-avatar>
               <span class="user-copy">
@@ -109,7 +115,7 @@ const logout = async () => {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
-  height: 92px;
+  height: 102px;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(237, 244, 246, 0.16), rgba(237, 244, 246, 0));
 }
@@ -118,11 +124,11 @@ const logout = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 20px;
   width: 100%;
   max-width: none;
   margin: 0 auto;
-  padding: 16px clamp(1rem, 2vw, 2rem) 14px;
+  padding: 18px clamp(1rem, 2vw, 2rem) 16px;
   border-radius: 0;
   pointer-events: auto;
   background: transparent;
@@ -133,63 +139,92 @@ const logout = async () => {
 .brand-link {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   border: none;
   padding: 0;
   background: transparent;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+}
+
+.brand-link:hover .brand-mark {
+  transform: translateY(-1px);
+  box-shadow:
+    0 14px 26px rgba(35, 74, 92, 0.11),
+    inset 0 0 0 1px rgba(173, 220, 221, 0.56);
+}
+
+.brand-link:focus,
+.brand-link:focus-visible,
+.brand-link:active {
+  outline: none;
+}
+
+.brand-link:focus .brand-mark,
+.brand-link:focus-visible .brand-mark,
+.brand-link:active .brand-mark {
+  box-shadow:
+    0 10px 22px rgba(35, 74, 92, 0.08),
+    inset 0 0 0 1px rgba(173, 220, 221, 0.48);
 }
 
 .brand-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 18px;
+  width: 56px;
+  height: 56px;
+  border-radius: 20px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.76), rgba(237, 246, 247, 0.48));
   box-shadow:
     0 10px 22px rgba(35, 74, 92, 0.08),
     inset 0 0 0 1px rgba(173, 220, 221, 0.48);
   backdrop-filter: blur(10px);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .brand-logo {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
 }
 
 .brand-copy {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 4px;
 }
 
 .brand-title {
   color: #14384c;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.03em;
 }
 
 .brand-subtitle {
   color: #688390;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   margin-right: clamp(0.2rem, 0.5vw, 0.45rem);
 }
 
 .header-btn {
-  min-width: 88px;
-  min-height: 42px;
-  border-radius: 16px;
+  min-width: 94px;
+  min-height: 46px;
+  border-radius: 18px;
+  padding: 0 18px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -212,12 +247,12 @@ const logout = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 42px;
-  min-height: 36px;
-  padding: 0 14px;
+  min-width: 46px;
+  min-height: 40px;
+  padding: 0 15px;
   border-radius: 999px;
   color: #17374b;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.72),
@@ -247,11 +282,11 @@ const logout = async () => {
 .user-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  min-height: 56px;
+  gap: 14px;
+  min-height: 62px;
   border: none;
-  padding: 8px 10px 8px 8px;
-  border-radius: 20px;
+  padding: 10px 14px 10px 10px;
+  border-radius: 22px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(242, 249, 250, 0.54));
   box-shadow:
@@ -259,34 +294,61 @@ const logout = async () => {
     inset 0 0 0 1px rgba(173, 220, 221, 0.46);
   cursor: pointer;
   backdrop-filter: blur(12px);
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.user-trigger:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 14px 28px rgba(35, 74, 92, 0.1),
+    inset 0 0 0 1px rgba(173, 220, 221, 0.54);
+}
+
+.user-trigger:focus,
+.user-trigger:focus-visible,
+.user-trigger:active {
+  outline: none;
+  box-shadow:
+    0 10px 22px rgba(35, 74, 92, 0.08),
+    inset 0 0 0 1px rgba(173, 220, 221, 0.46);
 }
 
 .user-avatar {
   box-shadow:
     0 10px 18px rgba(35, 74, 92, 0.16),
     0 0 0 2px rgba(255, 255, 255, 0.76);
+  flex-shrink: 0;
 }
 
 .user-copy {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 4px;
   min-width: 0;
 }
 
 .user-copy strong {
-  max-width: 160px;
+  max-width: 172px;
   overflow: hidden;
   color: #17374b;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
+  line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .user-copy span {
   color: #708895;
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1;
 }
 
 @media (max-width: 768px) {
@@ -296,7 +358,7 @@ const logout = async () => {
 
   .header-shell {
     width: 100%;
-    padding: 12px 0.8rem 10px;
+    padding: 14px 0.8rem 12px;
   }
 
   .brand-subtitle,
@@ -311,7 +373,7 @@ const logout = async () => {
 
   .header-btn {
     min-width: 72px;
-    min-height: 38px;
+    min-height: 40px;
     padding: 0 14px;
   }
 
@@ -320,8 +382,8 @@ const logout = async () => {
   }
 
   .user-trigger {
-    min-height: 48px;
-    padding-right: 8px;
+    min-height: 52px;
+    padding: 8px 10px 8px 8px;
   }
 
   .user-copy strong {
