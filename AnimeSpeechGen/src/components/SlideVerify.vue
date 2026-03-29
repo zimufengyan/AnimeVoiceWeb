@@ -22,28 +22,79 @@
     </div>
 
     <div class="stage-shell">
-      <div ref="stageWrapperRef" class="stage-wrapper">
-        <canvas
-          ref="backgroundCanvasRef"
-          class="stage-canvas"
+      <div
+        ref="stageWrapperRef"
+        class="stage-wrapper"
+        :style="{ height: `${stageHeight}px` }"
+      >
+        <img
+          v-if="stageImageUrl"
+          class="stage-image"
+          :src="stageImageUrl"
+          alt="验证拼图底图"
+          draggable="false"
+        />
+
+        <svg
+          v-if="slotPathD"
+          class="slot-overlay"
+          :viewBox="`0 0 ${stageWidth} ${stageHeight}`"
           :width="stageWidth"
           :height="stageHeight"
-        ></canvas>
+          aria-hidden="true"
+        >
+          <defs>
+            <filter :id="slotGlowId" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="6" result="blurred" />
+              <feColorMatrix
+                in="blurred"
+                type="matrix"
+                values="1 0 0 0 0
+                        0 1 0 0 0
+                        0 0 1 0 0
+                        0 0 0 0.28 0"
+              />
+            </filter>
+          </defs>
 
-        <div
-          v-if="targetBounds"
-          class="target-highlight"
-          :class="{ active: isDragging, success: status === 'success' }"
-          :style="targetHighlightStyle"
-        ></div>
+          <path
+            class="slot-halo"
+            :class="{ active: isDragging, success: status === 'success' }"
+            :d="slotPathD"
+            :filter="`url(#${slotGlowId})`"
+          />
+          <path class="slot-cutout" :d="slotPathD" />
+          <path class="slot-outline" :d="slotPathD" />
+          <path class="slot-outline soft" :d="slotPathD" />
+        </svg>
 
-        <canvas
-          ref="pieceCanvasRef"
-          class="piece-canvas"
-          :width="pieceCanvasSize"
-          :height="pieceCanvasSize"
-          :style="pieceCanvasStyle"
-        ></canvas>
+        <svg
+          v-if="stageImageUrl && piecePathD && slotBounds"
+          class="piece-svg"
+          :style="pieceStyle"
+          :viewBox="`0 0 ${pieceSize} ${pieceSize}`"
+          :width="pieceSize"
+          :height="pieceSize"
+          aria-hidden="true"
+        >
+          <defs>
+            <clipPath :id="pieceClipId">
+              <path :d="piecePathD" />
+            </clipPath>
+          </defs>
+
+          <image
+            :href="stageImageUrl"
+            :x="-slotBounds.left"
+            :y="-slotBounds.top"
+            :width="stageWidth"
+            :height="stageHeight"
+            preserveAspectRatio="none"
+            :clip-path="`url(#${pieceClipId})`"
+          />
+          <path class="piece-stroke" :d="piecePathD" />
+          <path class="piece-stroke soft" :d="piecePathD" />
+        </svg>
 
         <div v-if="isLoading" class="stage-loading">
           <RefreshRight class="stage-loading-icon" />
@@ -66,8 +117,17 @@
           @mousedown.prevent="startDrag"
           @touchstart.prevent="startDrag"
         >
-          <CircleCheckFilled v-if="status === 'success'" class="slider-handle-icon success" />
-          <DArrowRight v-else class="slider-handle-icon" />
+          <span class="slider-handle-core">
+            <CircleCheckFilled v-if="status === 'success'" class="slider-handle-icon success" />
+            <span v-else class="slider-handle-arrow-stack" aria-hidden="true">
+              <DArrowRight class="slider-handle-icon" />
+              <DArrowRight class="slider-handle-icon trailing" />
+            </span>
+          </span>
+          <span class="slider-handle-grip" aria-hidden="true">
+            <span></span>
+            <span></span>
+          </span>
         </button>
       </div>
     </div>
@@ -83,7 +143,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   CircleCheckFilled,
   CircleCloseFilled,
@@ -94,16 +154,10 @@ import {
   WarnTriangleFilled,
 } from '@element-plus/icons-vue'
 
-import slideImg from '@/assets/slideImgs/slideimg.png'
-import slideImg1 from '@/assets/slideImgs/slideimg1.png'
-import slideImg2 from '@/assets/slideImgs/slideimg2.png'
-import slideImg3 from '@/assets/slideImgs/slideimg3.png'
-import slideImg4 from '@/assets/slideImgs/slideimg4.png'
-import slideImg5 from '@/assets/slideImgs/slideimg5.png'
-import slideImg6 from '@/assets/slideImgs/slideimg6.png'
-import slideImg7 from '@/assets/slideImgs/slideimg7.png'
-import slideImg8 from '@/assets/slideImgs/slideimg8.png'
-import slideImg9 from '@/assets/slideImgs/slideimg9.png'
+import {
+  slideVerifyImageGroups,
+  type SlideVerifyImageGroup,
+} from '@/config/slideVerifyImages'
 
 type DragPoint = {
   x: number
@@ -113,17 +167,12 @@ type DragPoint = {
 
 type VerifyStatus = 'idle' | 'dragging' | 'fail' | 'warning' | 'success'
 
-type PuzzleBounds = {
+type SlotBounds = {
   left: number
   top: number
   size: number
-}
-
-type StageShape = {
-  x: number
-  y: number
-  size: number
   protrusion: number
+  innerSize: number
 }
 
 const props = withDefaults(
@@ -133,6 +182,7 @@ const props = withDefaults(
     accuracy?: number
     sliderText?: string
     imgs?: string[]
+    imageGroup?: SlideVerifyImageGroup
     showRefresh?: boolean
   }>(),
   {
@@ -140,6 +190,7 @@ const props = withDefaults(
     h: 300,
     accuracy: 6,
     sliderText: '向右拖动拼图完成验证',
+    imageGroup: 'default',
     showRefresh: true,
   },
 )
@@ -152,86 +203,77 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const backgroundCanvasRef = ref<HTMLCanvasElement | null>(null)
-const pieceCanvasRef = ref<HTMLCanvasElement | null>(null)
 const stageWrapperRef = ref<HTMLDivElement | null>(null)
 const sliderTrackRef = ref<HTMLDivElement | null>(null)
 const sliderHandleRef = ref<HTMLButtonElement | null>(null)
 
 const stageWidth = ref(props.w)
 const stageHeight = ref(props.h)
-const puzzleBounds = ref<PuzzleBounds | null>(null)
-const puzzleShape = ref<StageShape | null>(null)
-const pieceLeft = ref(0)
+const stageImageUrl = ref('')
+const currentImage = ref<HTMLImageElement | null>(null)
+const slotBounds = ref<SlotBounds | null>(null)
+
 const handleOffset = ref(0)
+const pieceX = ref(0)
 const isDragging = ref(false)
 const isLoading = ref(true)
+const isRefreshing = ref(false)
 const status = ref<VerifyStatus>('idle')
 const statusMessage = ref('拖动下方滑块，让拼图回到缺口处。')
-const isRefreshing = ref(false)
-const pieceCanvasSize = ref(0)
 
 const sliderStartX = ref(0)
 const handleStartOffset = ref(0)
 const dragStartTime = ref(0)
 const dragTrail = ref<DragPoint[]>([])
-const currentImage = ref<HTMLImageElement | null>(null)
+
+const instanceKey = Math.random().toString(36).slice(2, 10)
+const slotGlowId = `slide-slot-glow-${instanceKey}`
+const pieceClipId = `slide-piece-clip-${instanceKey}`
 
 let resizeObserver: ResizeObserver | null = null
 let refreshSpinTimer: ReturnType<typeof setTimeout> | null = null
 let resetTimer: ReturnType<typeof setTimeout> | null = null
 
-const defaultImages = [
-  slideImg,
-  slideImg1,
-  slideImg2,
-  slideImg3,
-  slideImg4,
-  slideImg5,
-  slideImg6,
-  slideImg7,
-  slideImg8,
-  slideImg9,
-]
+const imagePool = computed(() => {
+  if (props.imgs?.length) return props.imgs
+  return slideVerifyImageGroups[props.imageGroup] || slideVerifyImageGroups.default
+})
 
-const imagePool = computed(() => (props.imgs && props.imgs.length ? props.imgs : defaultImages))
 const normalizedAccuracy = computed(() => {
   const nextAccuracy = Number(props.accuracy || 6)
   return Number.isFinite(nextAccuracy) ? Math.min(10, Math.max(2, nextAccuracy)) : 6
 })
 
-const maxPieceTravel = computed(() => {
-  if (!puzzleBounds.value) return 0
-  return Math.max(stageWidth.value - puzzleBounds.value.size, 0)
+const pieceStartX = computed(() => {
+  return Math.max(12, Math.min(18, Math.round(stageWidth.value * 0.03)))
+})
+
+const pieceSize = computed(() => slotBounds.value?.size || 0)
+
+const pieceTravel = computed(() => {
+  if (!slotBounds.value) return 0
+  return Math.max(slotBounds.value.left - pieceStartX.value, 0)
 })
 
 const maxHandleTravel = computed(() => {
   const sliderWidth = sliderTrackRef.value?.clientWidth || stageWidth.value
-  const handleWidth = sliderHandleRef.value?.offsetWidth || 72
-  return Math.max(sliderWidth - handleWidth - 4, 0)
+  const handleWidth = sliderHandleRef.value?.offsetWidth || 86
+  const trackLimit = Math.max(sliderWidth - handleWidth - 4, 0)
+  return Math.min(trackLimit, pieceTravel.value)
 })
 
 const progressWidth = computed(() => {
-  const handleWidth = sliderHandleRef.value?.offsetWidth || 72
-  return Math.min(handleOffset.value + handleWidth * 0.66, (sliderTrackRef.value?.clientWidth || 0))
+  const handleWidth = sliderHandleRef.value?.offsetWidth || 86
+  return Math.min(handleOffset.value + handleWidth * 0.66, sliderTrackRef.value?.clientWidth || 0)
 })
 
-const pieceCanvasStyle = computed(() => {
-  if (!puzzleBounds.value) return {}
+const pieceStyle = computed(() => {
+  if (!slotBounds.value) return {}
   return {
-    width: `${puzzleBounds.value.size}px`,
-    height: `${puzzleBounds.value.size}px`,
-    transform: `translate(${pieceLeft.value}px, ${puzzleBounds.value.top}px)`,
-    opacity: `${status.value === 'success' || isDragging.value || status.value === 'fail' || status.value === 'warning' ? 1 : 0.98}`,
-  }
-})
-
-const targetHighlightStyle = computed(() => {
-  if (!puzzleBounds.value) return {}
-  return {
-    width: `${puzzleBounds.value.size}px`,
-    height: `${puzzleBounds.value.size}px`,
-    transform: `translate(${puzzleBounds.value.left}px, ${puzzleBounds.value.top}px)`,
+    width: `${slotBounds.value.size}px`,
+    height: `${slotBounds.value.size}px`,
+    transform: `translate(${pieceX.value}px, ${slotBounds.value.top}px)`,
+    opacity: '1',
   }
 })
 
@@ -240,6 +282,47 @@ const sliderTextDisplay = computed(() => {
   if (status.value === 'fail') return '位置偏差过大，请重试'
   if (status.value === 'warning') return '请自然拖动后重试'
   return props.sliderText
+})
+
+const buildPuzzlePathD = (left: number, top: number, innerSize: number, protrusion: number) => {
+  const x = left + protrusion
+  const y = top + protrusion
+  const size = innerSize
+
+  return [
+    `M ${x} ${y}`,
+    `L ${x + size * 0.32} ${y}`,
+    `Q ${x + size * 0.38} ${y - protrusion} ${x + size * 0.5} ${y - protrusion * 0.9}`,
+    `Q ${x + size * 0.62} ${y - protrusion} ${x + size * 0.68} ${y}`,
+    `L ${x + size} ${y}`,
+    `L ${x + size} ${y + size * 0.32}`,
+    `Q ${x + size + protrusion} ${y + size * 0.38} ${x + size + protrusion * 0.9} ${y + size * 0.5}`,
+    `Q ${x + size + protrusion} ${y + size * 0.62} ${x + size} ${y + size * 0.68}`,
+    `L ${x + size} ${y + size}`,
+    `L ${x + size * 0.68} ${y + size}`,
+    `Q ${x + size * 0.62} ${y + size + protrusion} ${x + size * 0.5} ${y + size + protrusion * 0.9}`,
+    `Q ${x + size * 0.38} ${y + size + protrusion} ${x + size * 0.32} ${y + size}`,
+    `L ${x} ${y + size}`,
+    `L ${x} ${y + size * 0.68}`,
+    `Q ${x - protrusion} ${y + size * 0.62} ${x - protrusion * 0.9} ${y + size * 0.5}`,
+    `Q ${x - protrusion} ${y + size * 0.38} ${x} ${y + size * 0.32}`,
+    'Z',
+  ].join(' ')
+}
+
+const slotPathD = computed(() => {
+  if (!slotBounds.value) return ''
+  return buildPuzzlePathD(
+    slotBounds.value.left,
+    slotBounds.value.top,
+    slotBounds.value.innerSize,
+    slotBounds.value.protrusion,
+  )
+})
+
+const piecePathD = computed(() => {
+  if (!slotBounds.value) return ''
+  return buildPuzzlePathD(0, 0, slotBounds.value.innerSize, slotBounds.value.protrusion)
 })
 
 const clearResetTimer = () => {
@@ -267,6 +350,7 @@ const getClientPoint = (event: MouseEvent | TouchEvent) => {
 }
 
 const getRandomNumberByRange = (start: number, end: number) => {
+  if (end <= start) return start
   return Math.round(Math.random() * (end - start) + start)
 }
 
@@ -279,13 +363,12 @@ const loadImage = (src: string) =>
     image.src = src
   })
 
-const createStageImageCanvas = (image: HTMLImageElement) => {
+const renderStageImage = (image: HTMLImageElement) => {
   const canvas = document.createElement('canvas')
   canvas.width = stageWidth.value
   canvas.height = stageHeight.value
   const context = canvas.getContext('2d')
-
-  if (!context) return canvas
+  if (!context) return ''
 
   const canvasAspectRatio = stageWidth.value / stageHeight.value
   const imageAspectRatio = image.width / image.height
@@ -306,167 +389,12 @@ const createStageImageCanvas = (image: HTMLImageElement) => {
   }
 
   context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
-  return canvas
-}
-
-const drawPuzzlePath = (context: CanvasRenderingContext2D, shape: StageShape) => {
-  const { x, y, size, protrusion } = shape
-  context.beginPath()
-  context.moveTo(x, y)
-  context.lineTo(x + size * 0.32, y)
-  context.quadraticCurveTo(
-    x + size * 0.38,
-    y - protrusion,
-    x + size * 0.5,
-    y - protrusion * 0.9,
-  )
-  context.quadraticCurveTo(x + size * 0.62, y - protrusion, x + size * 0.68, y)
-  context.lineTo(x + size, y)
-  context.lineTo(x + size, y + size * 0.32)
-  context.quadraticCurveTo(
-    x + size + protrusion,
-    y + size * 0.38,
-    x + size + protrusion * 0.9,
-    y + size * 0.5,
-  )
-  context.quadraticCurveTo(
-    x + size + protrusion,
-    y + size * 0.62,
-    x + size,
-    y + size * 0.68,
-  )
-  context.lineTo(x + size, y + size)
-  context.lineTo(x + size * 0.68, y + size)
-  context.quadraticCurveTo(
-    x + size * 0.62,
-    y + size + protrusion,
-    x + size * 0.5,
-    y + size + protrusion * 0.9,
-  )
-  context.quadraticCurveTo(
-    x + size * 0.38,
-    y + size + protrusion,
-    x + size * 0.32,
-    y + size,
-  )
-  context.lineTo(x, y + size)
-  context.lineTo(x, y + size * 0.68)
-  context.quadraticCurveTo(
-    x - protrusion,
-    y + size * 0.62,
-    x - protrusion * 0.9,
-    y + size * 0.5,
-  )
-  context.quadraticCurveTo(x - protrusion, y + size * 0.38, x, y + size * 0.32)
-  context.closePath()
-}
-
-const drawStage = () => {
-  if (!backgroundCanvasRef.value || !pieceCanvasRef.value || !currentImage.value || !puzzleShape.value || !puzzleBounds.value) {
-    return
-  }
-
-  const backgroundContext = backgroundCanvasRef.value.getContext('2d')
-  const pieceContext = pieceCanvasRef.value.getContext('2d')
-  if (!backgroundContext || !pieceContext) return
-
-  const stageImageCanvas = createStageImageCanvas(currentImage.value)
-  backgroundContext.clearRect(0, 0, stageWidth.value, stageHeight.value)
-  backgroundContext.drawImage(stageImageCanvas, 0, 0)
-
-  backgroundContext.save()
-  backgroundContext.fillStyle = 'rgba(6, 18, 32, 0.12)'
-  backgroundContext.fillRect(0, 0, stageWidth.value, stageHeight.value)
-  backgroundContext.restore()
-
-  backgroundContext.save()
-  const haloGradient = backgroundContext.createRadialGradient(
-    puzzleShape.value.x + puzzleShape.value.size / 2,
-    puzzleShape.value.y + puzzleShape.value.size / 2,
-    puzzleShape.value.size * 0.18,
-    puzzleShape.value.x + puzzleShape.value.size / 2,
-    puzzleShape.value.y + puzzleShape.value.size / 2,
-    puzzleShape.value.size * 0.72,
-  )
-  haloGradient.addColorStop(0, 'rgba(143, 223, 214, 0.32)')
-  haloGradient.addColorStop(0.65, 'rgba(143, 223, 214, 0.12)')
-  haloGradient.addColorStop(1, 'rgba(143, 223, 214, 0)')
-  backgroundContext.fillStyle = haloGradient
-  backgroundContext.fillRect(
-    puzzleBounds.value.left - 24,
-    puzzleBounds.value.top - 24,
-    puzzleBounds.value.size + 48,
-    puzzleBounds.value.size + 48,
-  )
-  backgroundContext.restore()
-
-  backgroundContext.save()
-  drawPuzzlePath(backgroundContext, puzzleShape.value)
-  backgroundContext.fillStyle = 'rgba(7, 21, 34, 0.34)'
-  backgroundContext.shadowColor = 'rgba(6, 18, 32, 0.24)'
-  backgroundContext.shadowBlur = 22
-  backgroundContext.fill()
-  backgroundContext.restore()
-
-  backgroundContext.save()
-  drawPuzzlePath(backgroundContext, puzzleShape.value)
-  backgroundContext.lineWidth = 1.6
-  backgroundContext.strokeStyle = 'rgba(255, 255, 255, 0.72)'
-  backgroundContext.stroke()
-  backgroundContext.restore()
-
-  pieceContext.clearRect(0, 0, pieceCanvasSize.value, pieceCanvasSize.value)
-  pieceContext.save()
-  drawPuzzlePath(pieceContext, {
-    x: puzzleShape.value.protrusion,
-    y: puzzleShape.value.protrusion,
-    size: puzzleShape.value.size,
-    protrusion: puzzleShape.value.protrusion,
-  })
-  pieceContext.clip()
-  pieceContext.drawImage(
-    stageImageCanvas,
-    puzzleBounds.value.left,
-    puzzleBounds.value.top,
-    puzzleBounds.value.size,
-    puzzleBounds.value.size,
-    0,
-    0,
-    pieceCanvasSize.value,
-    pieceCanvasSize.value,
-  )
-  pieceContext.restore()
-
-  pieceContext.save()
-  drawPuzzlePath(pieceContext, {
-    x: puzzleShape.value.protrusion,
-    y: puzzleShape.value.protrusion,
-    size: puzzleShape.value.size,
-    protrusion: puzzleShape.value.protrusion,
-  })
-  pieceContext.lineWidth = 2
-  pieceContext.strokeStyle = 'rgba(255, 255, 255, 0.94)'
-  pieceContext.shadowColor = 'rgba(8, 24, 38, 0.28)'
-  pieceContext.shadowBlur = 14
-  pieceContext.stroke()
-  pieceContext.restore()
-
-  pieceContext.save()
-  drawPuzzlePath(pieceContext, {
-    x: puzzleShape.value.protrusion,
-    y: puzzleShape.value.protrusion,
-    size: puzzleShape.value.size,
-    protrusion: puzzleShape.value.protrusion,
-  })
-  pieceContext.lineWidth = 1
-  pieceContext.strokeStyle = 'rgba(103, 171, 178, 0.34)'
-  pieceContext.stroke()
-  pieceContext.restore()
+  return canvas.toDataURL('image/png')
 }
 
 const resetPositionState = () => {
   handleOffset.value = 0
-  pieceLeft.value = 0
+  pieceX.value = pieceStartX.value
   isDragging.value = false
   dragTrail.value = []
   sliderStartX.value = 0
@@ -479,31 +407,37 @@ const syncStatus = (nextStatus: VerifyStatus, nextMessage: string) => {
 }
 
 const buildChallenge = async (image?: HTMLImageElement | null) => {
-  const imageSource = image || (await loadImage(imagePool.value[getRandomNumberByRange(0, imagePool.value.length - 1)]))
-  currentImage.value = imageSource
-
-  const pieceSize = Math.round(Math.min(Math.max(stageWidth.value * 0.14, 52), 64))
-  const protrusion = Math.round(pieceSize * 0.14)
-  const safePadding = pieceSize + protrusion + 18
-  const puzzleX = getRandomNumberByRange(safePadding, stageWidth.value - safePadding - pieceSize)
-  const puzzleY = getRandomNumberByRange(safePadding * 0.35, stageHeight.value - safePadding * 0.9 - pieceSize)
-
-  puzzleShape.value = {
-    x: puzzleX + protrusion,
-    y: puzzleY + protrusion,
-    size: pieceSize - protrusion * 2,
-    protrusion,
+  if (!imagePool.value.length) {
+    throw new Error('未配置任何拼图图片')
   }
 
-  pieceCanvasSize.value = pieceSize
-  puzzleBounds.value = {
-    left: puzzleX,
-    top: puzzleY,
-    size: pieceSize,
+  const imageSource =
+    image ||
+    (await loadImage(imagePool.value[getRandomNumberByRange(0, imagePool.value.length - 1)]))
+  currentImage.value = imageSource
+  stageImageUrl.value = renderStageImage(imageSource)
+
+  const size = Math.round(Math.min(Math.max(stageWidth.value * 0.14, 54), 66))
+  const protrusion = Math.round(size * 0.14)
+  const innerSize = size - protrusion * 2
+  const safePadding = size + protrusion + 18
+  const minSlotLeft = Math.max(pieceStartX.value + size + 34, safePadding)
+  const maxSlotLeft = stageWidth.value - safePadding - size
+  const slotLeft = getRandomNumberByRange(minSlotLeft, maxSlotLeft)
+  const slotTop = getRandomNumberByRange(
+    Math.round(safePadding * 0.35),
+    stageHeight.value - Math.round(safePadding * 0.9) - size,
+  )
+
+  slotBounds.value = {
+    left: slotLeft,
+    top: slotTop,
+    size,
+    protrusion,
+    innerSize,
   }
 
   resetPositionState()
-  drawStage()
   syncStatus('idle', '拖动下方滑块，让拼图回到缺口处。')
 }
 
@@ -539,23 +473,22 @@ const verifyHumanTrail = () => {
   const uniqueXSteps = new Set(dragTrail.value.map((point) => Math.round(point.x))).size
   const averageDelta = deltas.reduce((sum, delta) => sum + delta, 0) / Math.max(deltas.length, 1)
   const variance =
-    deltas.reduce((sum, delta) => sum + (delta - averageDelta) ** 2, 0) / Math.max(deltas.length, 1)
+    deltas.reduce((sum, delta) => sum + (delta - averageDelta) ** 2, 0) /
+    Math.max(deltas.length, 1)
 
   if (duration < 140 && uniqueXSteps <= 2) return true
   if (duration < 220 && variance < 0.4 && deltas.length >= 2) return true
   return false
 }
 
-const pieceLeftFromHandle = (offset: number) => {
-  if (maxHandleTravel.value === 0) return 0
-  const ratio = offset / maxHandleTravel.value
-  return ratio * maxPieceTravel.value
+const pieceXFromHandle = (offset: number) => {
+  if (pieceTravel.value === 0) return pieceStartX.value
+  return pieceStartX.value + Math.min(offset, pieceTravel.value)
 }
 
-const handleOffsetFromPiece = (left: number) => {
-  if (maxPieceTravel.value === 0) return 0
-  const ratio = left / maxPieceTravel.value
-  return ratio * maxHandleTravel.value
+const handleOffsetFromPiece = (x: number) => {
+  if (pieceTravel.value === 0) return 0
+  return Math.max(0, Math.min(x - pieceStartX.value, maxHandleTravel.value))
 }
 
 const queueReset = (message: string, nextStatus: VerifyStatus, emitType: 'fail' | 'again') => {
@@ -574,19 +507,19 @@ const queueReset = (message: string, nextStatus: VerifyStatus, emitType: 'fail' 
 }
 
 const completeVerification = () => {
-  if (!puzzleBounds.value) return
+  if (!slotBounds.value) return
   const elapsed = performance.now() - dragStartTime.value
-  pieceLeft.value = puzzleBounds.value.left
-  handleOffset.value = handleOffsetFromPiece(puzzleBounds.value.left)
+  pieceX.value = slotBounds.value.left
+  handleOffset.value = handleOffsetFromPiece(slotBounds.value.left)
   syncStatus('success', `验证通过，用时 ${(elapsed / 1000).toFixed(1)} 秒。`)
   emit('success', elapsed)
 }
 
 const finishDrag = () => {
-  if (!isDragging.value || !puzzleBounds.value) return
+  if (!isDragging.value || !slotBounds.value) return
 
   isDragging.value = false
-  const offsetDiff = Math.abs(pieceLeft.value - puzzleBounds.value.left)
+  const offsetDiff = Math.abs(pieceX.value - slotBounds.value.left)
   const suspicious = verifyHumanTrail()
 
   if (offsetDiff <= normalizedAccuracy.value) {
@@ -609,7 +542,7 @@ const updateDragOffset = (clientX: number, clientY: number) => {
     maxHandleTravel.value,
   )
   handleOffset.value = nextOffset
-  pieceLeft.value = pieceLeftFromHandle(nextOffset)
+  pieceX.value = pieceXFromHandle(nextOffset)
   dragTrail.value.push({
     x: nextOffset,
     y: clientY,
@@ -687,15 +620,6 @@ const syncStageSize = async () => {
   await buildChallenge(currentImage.value)
 }
 
-watch(
-  () => [stageWidth.value, stageHeight.value],
-  () => {
-    if (currentImage.value && puzzleBounds.value) {
-      drawStage()
-    }
-  },
-)
-
 onMounted(async () => {
   await nextTick()
   resizeObserver = new ResizeObserver(() => {
@@ -766,12 +690,6 @@ defineExpose({
   margin-bottom: 18px;
 }
 
-.panel-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
 .panel-copy h3 {
   margin: 0;
   color: #17384b;
@@ -820,7 +738,10 @@ defineExpose({
 
 .panel-icon-btn:focus,
 .panel-icon-btn:focus-visible,
-.panel-icon-btn:active {
+.panel-icon-btn:active,
+.slider-handle:focus,
+.slider-handle:focus-visible,
+.slider-handle:active {
   outline: none;
 }
 
@@ -857,59 +778,75 @@ defineExpose({
     #f6fbfc;
 }
 
-.stage-canvas,
-.piece-canvas {
-  display: block;
-}
-
-.stage-canvas {
+.stage-image,
+.slot-overlay {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: auto;
+  height: 100%;
 }
 
-.piece-canvas {
+.stage-image {
+  display: block;
+  object-fit: cover;
+  user-select: none;
+}
+
+.slot-overlay {
+  pointer-events: none;
+}
+
+.slot-halo {
+  fill: rgba(143, 223, 214, 0.22);
+  transition: fill 0.18s ease;
+}
+
+.slot-halo.active {
+  fill: rgba(143, 223, 214, 0.28);
+}
+
+.slot-halo.success {
+  fill: rgba(104, 205, 177, 0.26);
+}
+
+.slot-cutout {
+  fill: rgba(7, 21, 34, 0.34);
+}
+
+.slot-outline {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.84);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.slot-outline.soft {
+  stroke: rgba(103, 171, 178, 0.42);
+  stroke-width: 1;
+}
+
+.piece-svg {
   position: absolute;
   left: 0;
   top: 0;
   z-index: 3;
-  border-radius: 18px;
-  background: transparent;
   pointer-events: none;
-  filter: drop-shadow(0 16px 24px rgba(18, 42, 58, 0.22));
+  filter: drop-shadow(0 18px 28px rgba(18, 42, 58, 0.26));
   transition:
     opacity 0.2s ease,
     transform 0.06s linear;
 }
 
-.target-highlight {
-  position: absolute;
-  left: 0;
-  top: 0;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
-    0 0 0 1px rgba(108, 192, 184, 0.16);
-  background:
-    radial-gradient(circle at center, rgba(155, 231, 223, 0.1), rgba(155, 231, 223, 0) 72%);
-  pointer-events: none;
-  animation: targetPulse 2.2s ease-in-out infinite;
+.piece-stroke {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 2;
+  stroke-linejoin: round;
 }
 
-.target-highlight.active {
-  animation-duration: 1.5s;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
-    0 0 0 1px rgba(108, 192, 184, 0.24),
-    0 0 20px rgba(108, 192, 184, 0.16);
-}
-
-.target-highlight.success {
-  animation: none;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
-    0 0 0 1px rgba(96, 206, 176, 0.28),
-    0 0 24px rgba(96, 206, 176, 0.2);
+.piece-stroke.soft {
+  stroke: rgba(103, 171, 178, 0.32);
+  stroke-width: 1;
 }
 
 .stage-loading {
@@ -965,7 +902,7 @@ defineExpose({
   position: relative;
   z-index: 1;
   width: 100%;
-  padding: 0 96px 0 96px;
+  padding: 0 112px 0 112px;
   color: #5c7c89;
   font-size: 14px;
   font-weight: 600;
@@ -980,19 +917,21 @@ defineExpose({
   left: 4px;
   top: 4px;
   z-index: 2;
-  width: 72px;
+  width: 86px;
   height: 54px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 16px 0 18px;
   border: none;
   border-radius: 18px;
   color: #12394b;
   background:
-    linear-gradient(145deg, rgba(241, 251, 252, 0.98), rgba(205, 236, 236, 0.98));
+    linear-gradient(145deg, rgba(245, 252, 252, 0.99), rgba(199, 233, 234, 0.99));
   box-shadow:
-    0 14px 24px rgba(44, 86, 106, 0.16),
-    inset 0 0 0 1px rgba(142, 201, 205, 0.88);
+    0 16px 26px rgba(44, 86, 106, 0.2),
+    inset 0 0 0 1px rgba(126, 194, 198, 0.98);
   cursor: grab;
   transition:
     transform 0.12s linear,
@@ -1006,8 +945,8 @@ defineExpose({
 .slider-handle:hover,
 .slider-handle.dragging {
   box-shadow:
-    0 18px 28px rgba(44, 86, 106, 0.2),
-    inset 0 0 0 1px rgba(121, 190, 194, 0.94);
+    0 20px 32px rgba(44, 86, 106, 0.24),
+    inset 0 0 0 1px rgba(106, 183, 188, 1);
 }
 
 .slider-handle.dragging {
@@ -1016,22 +955,52 @@ defineExpose({
     linear-gradient(135deg, rgba(130, 214, 206, 0.94), rgba(248, 217, 171, 0.9));
 }
 
-.slider-handle:focus,
-.slider-handle:focus-visible,
-.slider-handle:active {
-  outline: none;
+.slider-handle-core {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+}
+
+.slider-handle-arrow-stack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .slider-handle-icon {
   display: block;
-  width: 1.45rem;
-  height: 1.45rem;
+  width: 1.5rem;
+  height: 1.5rem;
   color: currentColor;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.28));
 }
 
 .slider-handle-icon.success {
   width: 1.35rem;
   height: 1.35rem;
+}
+
+.slider-handle-icon.trailing {
+  margin-left: -10px;
+  opacity: 0.66;
+}
+
+.slider-handle-grip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(88, 151, 158, 0.28);
+}
+
+.slider-handle-grip span {
+  display: block;
+  width: 3px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(84, 142, 148, 0.66), rgba(123, 183, 188, 0.9));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36);
 }
 
 .slider-shell.is-success .slider-progress {
@@ -1094,18 +1063,6 @@ defineExpose({
   flex-shrink: 0;
 }
 
-@keyframes targetPulse {
-  0%,
-  100% {
-    opacity: 0.74;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.018);
-  }
-}
-
 @keyframes spinRefresh {
   from {
     transform: rotate(0deg);
@@ -1136,13 +1093,14 @@ defineExpose({
   }
 
   .slider-track-text {
-    padding: 0 84px;
+    padding: 0 92px;
     font-size: 13px;
   }
 
   .slider-handle {
-    width: 64px;
+    width: 76px;
     height: 48px;
+    padding: 0 12px 0 14px;
     border-radius: 16px;
   }
 

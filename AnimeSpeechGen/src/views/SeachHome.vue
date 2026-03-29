@@ -11,7 +11,7 @@
           </div>
 
           <div class="hero-title-block">
-            <h1>多 IP 角色语音工坊</h1>
+            <h1>二次元语音工坊</h1>
             <p class="hero-description">
               搜索角色，切换形象，快速生成台词演绎。
             </p>
@@ -85,11 +85,7 @@
 
         <div class="hero-carousel-shell">
           <div class="carousel-header">
-            <div>
-              <p class="carousel-label">本周推荐</p>
-              <h2>本周精选</h2>
-            </div>
-            <span class="carousel-status">Live Showcase</span>
+            <h2>{{ currentHeroSlide?.title || '本周精选' }}</h2>
           </div>
 
           <el-carousel
@@ -102,21 +98,19 @@
             @change="handleCarouselChange"
           >
             <el-carousel-item v-for="slide in heroSlidesView" :key="slide.key">
-              <article class="hero-slide" :style="getCoverStyle(slide.backgroundImage)">
-                <div class="hero-slide-overlay"></div>
+                <article class="hero-slide" :style="getCoverStyle(slide.backgroundImage)">
+                  <div class="hero-slide-overlay"></div>
 
-                <div class="slide-top-row">
-                  <span class="slide-badge">{{ slide.badge }}</span>
-                  <span class="slide-stat">{{ slide.statLabel }} · {{ slide.statValue }}</span>
-                </div>
+                  <div class="slide-top-row">
+                    <span class="slide-badge">{{ slide.badge }}</span>
+                  </div>
 
-                <img :src="slide.logo" alt="slide-logo" class="slide-logo" />
+                  <img :src="slide.logo" alt="slide-logo" class="slide-logo" />
 
-                <div class="slide-body">
-                  <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
-                  <h3>{{ slide.title }}</h3>
-                  <p class="slide-description">{{ slide.description }}</p>
-                </div>
+                  <div class="slide-body">
+                    <h3>{{ slide.title }}</h3>
+                    <p class="slide-description">{{ slide.description }}</p>
+                  </div>
 
                 <div class="slide-bottom-area">
                   <div class="slide-character-row">
@@ -151,13 +145,12 @@
               v-for="(slide, index) in heroSlidesView"
               :key="slide.key"
               class="carousel-indicator"
-              :class="{ active: activeHeroIndex === index }"
-              @click="setActiveHero(index)"
-            >
-              <span class="indicator-title">{{ slide.eyebrow }}</span>
-              <span class="indicator-caption">{{ slide.badge }}</span>
-            </button>
-          </div>
+                :class="{ active: activeHeroIndex === index }"
+                @click="setActiveHero(index)"
+              >
+                <span class="indicator-title">{{ slide.indicatorLabel }}</span>
+              </button>
+            </div>
         </div>
       </div>
     </section>
@@ -459,6 +452,8 @@ const handleCarouselChange = (index: number) => {
   activeHeroIndex.value = index
 }
 
+const currentHeroSlide = computed(() => heroSlidesView.value[activeHeroIndex.value] ?? heroSlidesView.value[0] ?? null)
+
 const setActiveHero = (index: number) => {
   carouselRef.value?.setActiveItem(index)
   activeHeroIndex.value = index
@@ -615,8 +610,7 @@ onUnmounted(() => {
 }
 
 .hero-eyebrow,
-.section-eyebrow,
-.carousel-label {
+.section-eyebrow {
   color: #4b7b88;
   font-size: 0.9rem;
   letter-spacing: 0.18em;
@@ -847,8 +841,8 @@ onUnmounted(() => {
 .hero-carousel-shell {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding: 1rem;
+  gap: 0.78rem;
+  padding: 0.8rem 1rem 1rem;
   border-radius: 30px;
   background: rgba(17, 28, 44, 0.82);
   box-shadow: inset 0 0 0 1px rgba(133, 180, 194, 0.14);
@@ -856,28 +850,16 @@ onUnmounted(() => {
 
 .carousel-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  min-height: 2.7rem;
+  padding: 0.05rem 0 0.1rem;
 }
 
 .carousel-header h2 {
+  margin: 0;
   color: #f5fbfe;
-  font-size: 1.8rem;
-}
-
-.carousel-label {
-  color: rgba(204, 238, 242, 0.72);
-}
-
-.carousel-status {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.38rem 0.85rem;
-  border-radius: 999px;
-  color: #d7f4ef;
-  font-size: 0.8rem;
-  background: rgba(111, 196, 187, 0.18);
+  font-size: 1.55rem;
+  line-height: 1.08;
 }
 
 .hero-slide {
@@ -916,25 +898,16 @@ onUnmounted(() => {
   gap: 1rem;
 }
 
-.slide-badge,
-.slide-stat {
+.slide-badge {
   display: inline-flex;
   align-items: center;
   min-height: 2rem;
   padding: 0.35rem 0.8rem;
   border-radius: 999px;
   font-size: 0.78rem;
-}
-
-.slide-badge {
   color: #f4f7f8;
   background: rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(8px);
-}
-
-.slide-stat {
-  color: #eaf9f7;
-  background: rgba(99, 181, 174, 0.25);
 }
 
 .slide-logo {
@@ -950,13 +923,6 @@ onUnmounted(() => {
   margin-top: 0.25rem;
   max-width: 23rem;
   color: #f7fbfd;
-}
-
-.slide-eyebrow {
-  color: rgba(231, 247, 250, 0.78);
-  font-size: 0.9rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
 }
 
 .slide-body h3 {
@@ -1091,12 +1057,6 @@ onUnmounted(() => {
 .indicator-title {
   font-size: 0.95rem;
   font-weight: 600;
-}
-
-.indicator-caption {
-  font-size: 0.76rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .feature-section,

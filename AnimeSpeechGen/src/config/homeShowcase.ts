@@ -1,10 +1,7 @@
 import genshinHeroMain from '@/assets/ip-themes/genshin/home/carousel/genshin-hero-main.webp'
 import genshinWeeklyNew from '@/assets/ip-themes/genshin/home/carousel/genshin-weekly-new.webp'
 import genshinPopularVoices from '@/assets/ip-themes/genshin/home/carousel/genshin-popular-voices.webp'
-import genshinLogo from '@/assets/ip-themes/genshin/home/logos/genshin-logo.jpg'
-import genshinStageMain from '@/assets/ip-themes/genshin/voice/backgrounds/genshin-voice-stage-main.png'
-import genshinStageAlt from '@/assets/ip-themes/genshin/voice/backgrounds/genshin-voice-stage-alt.png'
-import starRailLogo from '@/assets/starrail_logo.jpg'
+import { ipHomeAssets } from '@/config/ipHomeAssets'
 
 export type HomeShowcaseCharacter = {
   key: string
@@ -18,15 +15,13 @@ export type HomeShowcaseCharacter = {
 export type HomeHeroSlide = {
   key: string
   badge: string
-  eyebrow: string
   title: string
   description: string
   ctaText: string
   route: string
   backgroundImage: string
   characterKeys: string[]
-  statLabel: string
-  statValue: string
+  indicatorLabel: string
 }
 
 export type HomeFeatureCard = {
@@ -99,42 +94,36 @@ export const genshinShowcaseCharacters: HomeShowcaseCharacter[] = [
 export const homeHeroSlides: HomeHeroSlide[] = [
   {
     key: 'genshin-main',
-    badge: 'RECOMMENDED IP',
-    eyebrow: '提瓦特语音工坊',
-    title: '一键进入提瓦特语音工坊',
+    badge: '精选推荐',
+    title: '热门 IP',
     description: '搜索角色，切换立绘，快速生成台词演绎。',
     ctaText: '进入原神工坊',
     route: '/genshin',
     backgroundImage: genshinHeroMain,
     characterKeys: ['ayaka', 'furina', 'yae-miko'],
-    statLabel: '当前主推',
-    statValue: '原神主题首页',
+    indicatorLabel: '工坊入口',
   },
   {
     key: 'weekly-new',
-    badge: 'WEEKLY UPDATE',
-    eyebrow: '本周新增角色',
-    title: '本周新增，一眼直达',
+    badge: '本周更新',
+    title: '新角色已加入',
     description: '新角色、新推荐、新内容集中展示。',
-    ctaText: '查看推荐角色',
+    ctaText: '查看更新',
     route: '/genshin',
     backgroundImage: genshinWeeklyNew,
     characterKeys: ['furina', 'shenhe', 'ganyu'],
-    statLabel: '更新节奏',
-    statValue: '每周推荐位',
+    indicatorLabel: '本周更新',
   },
   {
     key: 'popular-voices',
-    badge: 'POPULAR PICKS',
-    eyebrow: '热门角色推荐',
-    title: '热门角色，快速开玩',
+    badge: '热门角色',
+    title: '从高人气角色开始',
     description: '高人气角色与常用风格直接前置。',
-    ctaText: '挑选人气角色',
+    ctaText: '挑选角色',
     route: '/genshin',
     backgroundImage: genshinPopularVoices,
     characterKeys: ['nahida', 'yae-miko', 'ayaka'],
-    statLabel: '推荐风格',
-    statValue: '剧情 / 治愈 / 高光',
+    indicatorLabel: '热门角色',
   },
 ]
 
@@ -147,8 +136,8 @@ export const homeFeatureCards: HomeFeatureCard[] = [
     accent: '#7db7b3',
     state: 'active',
     route: '/genshin',
-    coverImage: genshinStageMain,
-    logo: genshinLogo,
+    coverImage: ipHomeAssets.genshin.featureCardCover,
+    logo: ipHomeAssets.genshin.logo,
     tags: ['角色切换', '主题舞台', '热门推荐'],
     featuredCharacterKeys: ['ayaka', 'furina', 'yae-miko', 'nahida'],
     primaryAction: '立即体验',
@@ -162,8 +151,8 @@ export const homeFeatureCards: HomeFeatureCard[] = [
     accent: '#5f75d5',
     state: 'upcoming',
     route: '/starrail',
-    coverImage: genshinStageAlt,
-    logo: starRailLogo,
+    coverImage: ipHomeAssets.starrail.featureCardCover,
+    logo: ipHomeAssets.starrail.logo,
     tags: ['筹备中', '独立主题', '敬请期待'],
     featuredCharacterKeys: [],
     primaryAction: '敬请期待',
